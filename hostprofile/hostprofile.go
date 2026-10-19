@@ -28,6 +28,17 @@ type Profile struct {
 	Mounts     []Mount   `json:"mounts"`
 	Swaps      []Swap    `json:"swaps"`
 	Monitors   []Monitor `json:"monitors"`
+	Keyboard   Keyboard  `json:"keyboard"`
+}
+
+// Keyboard — раскладка (RMLVO композитора) и конфиги keyd как есть: разбирает их пакет keymap
+// на той стороне, где применяет.
+type Keyboard struct {
+	Layout  string            `json:"layout,omitempty"`
+	Variant string            `json:"variant,omitempty"`
+	Options string            `json:"options,omitempty"`
+	Model   string            `json:"model,omitempty"`
+	Keyd    map[string]string `json:"keyd,omitempty"`
 }
 
 type Mount struct {

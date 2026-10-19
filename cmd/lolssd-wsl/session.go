@@ -6,11 +6,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
 
 	"lolssd/hostprofile"
+	"lolssd/keymap"
 )
 
 const (
@@ -59,19 +61,50 @@ func session() int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
+	plan := keymap.Build(keymap.ParseKeyd(p.Keyboard.Keyd))
+	kbFile := ""
+	if err := writeKeymap(p.Keyboard, plan); err != nil {
+		fmt.Fprintln(os.Stderr, "внимание: раскладка для Super не собрана, Super в Hyprland работать не будет:", err)
+	} else {
+		kbFile = inner + "/session/keymap.xkb"
+	}
+
 	var cfg string
 	switch filepath.Ext(p.HyprConfig) {
 	case ".lua":
-		err = os.WriteFile(filepath.Join(sessionDir, "hyprland.lua"), []byte(luaWrapper(outs, n, p.HyprConfig)), 0o644)
+		err = os.WriteFile(filepath.Join(sessionDir, "hyprland.lua"), []byte(luaWrapper(outs, n, p.HyprConfig, kbFile, plan.Chords)), 0o644)
 		cfg = inner + "/session/hyprland.lua"
 	default:
-		cfg, err = translateConf(p.HyprConfig, p.User.Home, outs, n)
+		if len(plan.Chords) > 0 {
+			fmt.Fprintln(os.Stderr, "внимание: сочетания keyd (например, клавиша Copilot как Meta) поддерживаются только для Lua-конфига Hyprland")
+		}
+		cfg, err = translateConf(p.HyprConfig, p.User.Home, outs, n, kbFile)
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "конфиг Hyprland:", err)
 		return 1
 	}
 	return runIn(p, []string{"--bind-ro=" + sessionDir + ":" + inner + "/session"}, []string{"Hyprland", "--config", cfg})
+}
+
+// writeKeymap собирает раскладку Hyprland: RMLVO пользователя (xkbcli из пускового дистрибутива)
+// плюс клавиши плана: F13/F14 → Super_L/Super_R и «главные» клавиши сочетаний.
+func writeKeymap(kb hostprofile.Keyboard, plan keymap.Plan) error {
+	args := []string{"compile-keymap"}
+	for flag, v := range map[string]string{"--layout": kb.Layout, "--variant": kb.Variant, "--options": kb.Options, "--model": kb.Model} {
+		if v = strings.ReplaceAll(v, " ", ""); v != "" {
+			args = append(args, flag, v)
+		}
+	}
+	out, err := exec.Command("xkbcli", args...).Output()
+	if err != nil {
+		return fmt.Errorf("xkbcli %v: %w", args, err)
+	}
+	patched, err := keymap.PatchXKB(string(out), plan)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(sessionDir, "keymap.xkb"), []byte(patched), 0o644)
 }
 
 // mapOutputs сопоставляет мониторы хоста из профиля с мониторами Windows по EDID.
@@ -95,8 +128,23 @@ func mapOutputs(host []hostprofile.Monitor, wins []hostprofile.WinMonitor) []out
 // в аргументах любого вызова (на любой глубине таблиц) заменяет имена мониторов хоста:
 // порт целиком и «desc:» по префиксу, как сопоставляет сам Hyprland. Так перевод не зависит
 // от того, какие функции API принимают имя монитора. Затем подключает конфиг пользователя.
-func luaWrapper(outs []output, n int, userConfig string) string {
-	var ports, descs strings.Builder
+func luaWrapper(outs []output, n int, userConfig, kbFile string, chords []keymap.Chord) string {
+	var ports, descs, chordsLua strings.Builder
+	for _, c := range chords {
+		var mods, hide []string
+		for _, m := range c.Mods {
+			mods = append(mods, luaStr(m))
+		}
+		for _, h := range c.Hide {
+			hide = append(hide, luaStr(h))
+		}
+		fmt.Fprintf(&chordsLua, "  { trigger = %s, target = %s, tmod = %s, mods = { %s }, hide = { %s } },\n",
+			luaStr(c.Trigger), luaStr(c.Target), luaStr(c.TMod), strings.Join(mods, ", "), strings.Join(hide, ", "))
+	}
+	kb := "nil"
+	if kbFile != "" {
+		kb = luaStr(kbFile)
+	}
 	for _, o := range outs {
 		fmt.Fprintf(&ports, "  [ %s ] = %s,\n", luaStr(o.Port), luaStr(o.Name))
 		if o.Desc != "" {
@@ -109,6 +157,11 @@ local ports = {
 local descs = {
 ` + descs.String() + `}
 local outputs = ` + fmt.Sprint(n) + `
+local kbFile = ` + kb + `
+-- Сочетания keyd, дающие модификатор (клавиша Copilot = LMeta+LShift+F23 → правая Meta):
+-- пока зажат trigger, считается зажатым target, а модификаторы сочетания «не видны».
+local chords = {
+` + chordsLua.String() + `}
 
 local function tr(v)
   if type(v) == "string" then
@@ -136,9 +189,11 @@ local function call(f, ...)
 end
 
 -- Таблицы тоже оборачиваются, с сохранением вызова (у API бывают вызываемые таблицы).
-local function wrap(t)
+-- overrides — подменённые функции верхнего уровня hl.
+local function wrap(t, overrides)
   return setmetatable({}, {
     __index = function(_, k)
+      if overrides and overrides[k] then return overrides[k] end
       local x = t[k]
       if type(x) == "function" then
         return function(...) return call(x, ...) end
@@ -153,7 +208,27 @@ local function wrap(t)
 end
 
 local real = hl
-hl = wrap(real)
+local binds = {}
+local overrides = {}
+
+overrides.is_key_down = function(name)
+  for _, c in ipairs(chords) do
+    if real.is_key_down(c.trigger) then
+      if name == c.target then return true end
+      for _, h in ipairs(c.hide) do
+        if name == h then return false end
+      end
+    end
+  end
+  return call(real.is_key_down, name)
+end
+
+-- Привязки откладываются до конца конфига: для сочетаний нужны все сразу.
+overrides.bind = function(keys, action, opts)
+  binds[#binds + 1] = { keys = keys, action = action, opts = opts }
+end
+
+hl = wrap(real, overrides)
 
 -- Первый выход Hyprland создаёт сам, остальные — по одному окну на монитор Windows.
 real.on("hyprland.start", function()
@@ -162,6 +237,67 @@ end)
 
 package.path = ` + luaStr(filepath.Dir(userConfig)+"/?.lua;") + ` .. package.path
 dofile(` + luaStr(userConfig) + `)
+
+-- Привязки. Зажатое сочетание приходит с лишними модификаторами (у Copilot это Shift), поэтому
+-- к привязке «SUPER + K» добавляется «SHIFT + SUPER + K», которая срабатывает при зажатом trigger.
+-- Если у пользователя есть своя такая привязка и обе — функции, они разводятся по trigger;
+-- иначе пользовательская важнее.
+local function parse(keys)
+  local parts = {}
+  for p in keys:gmatch("[^+]+") do parts[#parts + 1] = p:match("^%s*(.-)%s*$") end
+  local key = table.remove(parts)
+  local mods = {}
+  for _, m in ipairs(parts) do mods[m:upper()] = true end
+  return mods, key
+end
+local function join(mods, key)
+  local list = {}
+  for m in pairs(mods) do list[#list + 1] = m end
+  table.sort(list)
+  list[#list + 1] = key
+  return table.concat(list, " + ")
+end
+
+local byKeys, variants = {}, {}
+for _, b in ipairs(binds) do
+  local m, k = parse(b.keys)
+  b.norm = join(m, k)
+  byKeys[b.norm] = b
+end
+for _, b in ipairs(binds) do
+  local mods, key = parse(b.keys)
+  for _, c in ipairs(chords) do
+    if mods[c.tmod] then
+      local vm = {}
+      for m in pairs(mods) do
+        if m ~= c.tmod then vm[m] = true end
+      end
+      for _, m in ipairs(c.mods) do vm[m] = true end
+      local v = join(vm, key)
+      if v ~= b.norm and not variants[v] then
+        variants[v] = { chord = c, orig = b, user = byKeys[v] }
+      end
+    end
+  end
+end
+for _, b in ipairs(binds) do
+  if not variants[b.norm] then call(real.bind, b.keys, b.action, b.opts) end
+end
+for v, x in pairs(variants) do
+  if not x.user then
+    call(real.bind, v, x.orig.action, x.orig.opts)
+  elseif type(x.orig.action) == "function" and type(x.user.action) == "function" then
+    call(real.bind, v, function(...)
+      if real.is_key_down(x.chord.trigger) then return x.orig.action(...) end
+      return x.user.action(...)
+    end, x.user.opts)
+  else
+    call(real.bind, x.user.keys, x.user.action, x.user.opts)
+  end
+end
+
+-- Раскладка с F13/F14 → Super_L/Super_R (Windows отдаёт Meta так) и клавишами сочетаний.
+if kbFile then real.config({ input = { kb_file = kbFile } }) end
 `
 }
 
@@ -174,14 +310,14 @@ func luaStr(s string) string {
 	return "[" + eq + "[" + s + "]" + eq + "]"
 }
 
-func translateConf(main, home string, outs []output, n int) (string, error) {
-	return translateConfTo(main, home, outs, n, sessionDir)
+func translateConf(main, home string, outs []output, n int, kbFile string) (string, error) {
+	return translateConfTo(main, home, outs, n, kbFile, sessionDir)
 }
 
 // translateConfTo копирует дерево hyprlang-конфигов (по строкам source = ...) в dir,
 // заменяя имена мониторов хоста, и возвращает путь главного конфига внутри контейнера.
 // Конфиги читаются из системы хоста, поднятой в rootDir.
-func translateConfTo(main, home string, outs []output, n int, dir string) (string, error) {
+func translateConfTo(main, home string, outs []output, n int, kbFile, dir string) (string, error) {
 	var res []*regexp.Regexp
 	var names []string
 	for _, o := range outs {
@@ -240,6 +376,9 @@ func translateConfTo(main, home string, outs []output, n int, dir string) (strin
 		if inside == inner+"/session/conf-0.conf" {
 			for range n - 1 {
 				lines = append(lines, "exec-once = hyprctl output create wayland")
+			}
+			if kbFile != "" {
+				lines = append(lines, "input {", "    kb_file = "+kbFile, "}")
 			}
 		}
 		return inside, os.WriteFile(filepath.Join(dir, name), []byte(strings.Join(lines, "\n")), 0o644)

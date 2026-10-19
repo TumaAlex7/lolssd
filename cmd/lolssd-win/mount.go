@@ -3,6 +3,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -10,11 +11,14 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"unsafe"
 
 	"golang.org/x/sys/windows"
+	"golang.org/x/sys/windows/registry"
 
 	"lolssd/efi"
 	"lolssd/hostprofile"
+	"lolssd/keymap"
 )
 
 // Пусковой дистрибутив читает выбранный профиль отсюда (в WSL — /mnt/c/ProgramData/lolssd/).
@@ -126,6 +130,8 @@ func mountHost() int {
 		log.Println("мониторы:", err)
 	}
 
+	rebootForKeys := applyScancodeMap(best)
+
 	disks := map[int]bool{}
 	for _, u := range best.PartUUIDs() {
 		disks[where[u]] = true
@@ -153,7 +159,42 @@ func mountHost() int {
 		log.Println("запись активного профиля:", err)
 		return 1
 	}
+	if rebootForKeys {
+		const mbOK, mbIconInfo, mbSetForeground = 0x0, 0x40, 0x10000
+		procMessageBox.Call(0, uintptr(unsafe.Pointer(windows.StringToUTF16Ptr(
+			"Переназначения клавиш из профиля Linux записаны (Meta → F13/F14 для Hyprland и правила keyd).\n"+
+				"Они начнут действовать после перезагрузки Windows."))),
+			uintptr(unsafe.Pointer(windows.StringToUTF16Ptr("lolssd"))), mbOK|mbIconInfo|mbSetForeground)
+	}
 	return 0
+}
+
+var procMessageBox = user32.NewProc("MessageBoxW")
+
+// applyScancodeMap записывает переназначения клавиш из профиля (docs/ARCHITECTURE.md §7) в
+// Scancode Map. Драйвер клавиатуры читает его при загрузке, поэтому при изменении нужна
+// перезагрузка — тогда возвращает true.
+func applyScancodeMap(p hostprofile.Profile) bool {
+	plan := keymap.Build(keymap.ParseKeyd(p.Keyboard.Keyd))
+	for _, n := range plan.Notes {
+		log.Println("клавиши, не переносится:", n)
+	}
+	want := keymap.ScancodeMap(plan.Scancodes)
+	k, _, err := registry.CreateKey(registry.LOCAL_MACHINE, `SYSTEM\CurrentControlSet\Control\Keyboard Layout`, registry.QUERY_VALUE|registry.SET_VALUE)
+	if err != nil {
+		log.Println("Scancode Map:", err)
+		return false
+	}
+	defer k.Close()
+	if cur, _, _ := k.GetBinaryValue("Scancode Map"); bytes.Equal(cur, want) {
+		return false
+	}
+	if err := k.SetBinaryValue("Scancode Map", want); err != nil {
+		log.Println("Scancode Map:", err)
+		return false
+	}
+	log.Printf("Scancode Map обновлён (%d переназначений), нужна перезагрузка", len(plan.Scancodes))
+	return true
 }
 
 // lolssdVolume находит том раздела LOLSSD по метке ФС и возвращает его корень, например `D:\`.

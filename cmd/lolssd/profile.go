@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"lolssd/hostprofile"
+	"lolssd/keymap"
 )
 
 // Типы профиля общие с Windows-частью, см. пакет hostprofile.
@@ -101,6 +102,7 @@ func runProfile() int {
 	}
 	p.Swaps = hostSwaps()
 	p.Monitors = hostMonitors()
+	p.Keyboard = hostKeyboard()
 
 	out, _ := json.MarshalIndent(p, "", "  ")
 	out = append(out, '\n')
@@ -122,6 +124,13 @@ func runProfile() int {
 	fmt.Println("Профиль записан:", path)
 	for _, m := range p.Mounts {
 		fmt.Printf("  %-12s %-6s %s\n", m.Target, m.FSType, describe(m.Device))
+	}
+	plan := keymap.Build(keymap.ParseKeyd(p.Keyboard.Keyd))
+	if len(plan.Chords) > 0 || len(plan.Scancodes) > 2 {
+		fmt.Printf("  переназначения клавиш keyd: %d в Windows, сочетаний для Hyprland: %d\n", len(plan.Scancodes)-2, len(plan.Chords))
+	}
+	for _, n := range plan.Notes {
+		fmt.Println("  не переносится в Windows:", n)
 	}
 	if !p.MesaD3D12 {
 		fmt.Println("  внимание: в Mesa нет драйвера d3d12, внутри Windows графика будет без ускорения")
@@ -398,4 +407,30 @@ func hostMonitors() []monitor {
 		}
 	}
 	return res
+}
+
+// hostKeyboard: раскладка из Hyprland, если он запущен, и все конфиги keyd.
+func hostKeyboard() hostprofile.Keyboard {
+	var kb hostprofile.Keyboard
+	if os.Getenv("HYPRLAND_INSTANCE_SIGNATURE") != "" {
+		for opt, dst := range map[string]*string{"kb_layout": &kb.Layout, "kb_variant": &kb.Variant, "kb_options": &kb.Options, "kb_model": &kb.Model} {
+			out, err := exec.Command("hyprctl", "-j", "getoption", "input:"+opt).Output()
+			var v struct {
+				Str string `json:"str"`
+			}
+			if err == nil && json.Unmarshal(out, &v) == nil && v.Str != "[[EMPTY]]" {
+				*dst = v.Str
+			}
+		}
+	}
+	files, _ := filepath.Glob("/etc/keyd/*.conf")
+	for _, f := range files {
+		if b, err := os.ReadFile(f); err == nil {
+			if kb.Keyd == nil {
+				kb.Keyd = map[string]string{}
+			}
+			kb.Keyd[filepath.Base(f)] = string(b)
+		}
+	}
+	return kb
 }

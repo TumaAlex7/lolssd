@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"lolssd/hostprofile"
+	"lolssd/keymap"
 )
 
 var outs = []output{
@@ -45,7 +46,7 @@ hl.monitor({ output = "desc:LG Electronics LG HDR" })
 hl.workspace_rule({ workspace = "1", rule = { monitor = "eDP-1" } })
 `), 0o644)
 	wrapper := filepath.Join(dir, "wrapper.lua")
-	os.WriteFile(wrapper, []byte(luaWrapper(outs, 3, user)), 0o644)
+	os.WriteFile(wrapper, []byte(luaWrapper(outs, 3, user, "", nil)), 0o644)
 	fake := filepath.Join(dir, "fake.lua")
 	os.WriteFile(fake, []byte(`
 local log = {}
@@ -105,7 +106,7 @@ func TestTranslateConf(t *testing.T) {
 	os.WriteFile(filepath.Join(cfgDir, "conf.d", "ws.conf"), []byte("workspace = 1, monitor:DP-9\n"), 0o644)
 
 	tmpSession := t.TempDir()
-	got, err := translateConfTo("/home/u/.config/hypr/hyprland.conf", "/home/u", outs, 2, tmpSession)
+	got, err := translateConfTo("/home/u/.config/hypr/hyprland.conf", "/home/u", outs, 2, "", tmpSession)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,5 +125,71 @@ func TestTranslateConf(t *testing.T) {
 	}
 	if !strings.Contains(string(ws), "monitor:WAYLAND-2") {
 		t.Fatalf("source-файл:\n%s", ws)
+	}
+}
+
+// Клавиша Copilot (LMeta+LShift+F23 → правая Meta) на модели bindSuper автора: выбор стороны
+// через hl.is_key_down("Super_L"), объект-диспетчер и конфликт с собственной SUPER+SHIFT-привязкой.
+func TestLuaChords(t *testing.T) {
+	lua, err := exec.LookPath("lua5.4")
+	if err != nil {
+		t.Skip("нет lua5.4")
+	}
+	dir := t.TempDir()
+	user := filepath.Join(dir, "hyprland.lua")
+	os.WriteFile(user, []byte(`
+local function isLeft() return hl.is_key_down("Super_L") end
+hl.bind("SUPER + 1", function() if isLeft() then print("left 1") else print("right 1") end end)
+hl.bind("SUPER + 2", hl.dsp.exec_cmd("two"))
+hl.bind("SUPER + 3", function() print("super 3") end)
+hl.bind("SUPER + SHIFT + 3", function() print("user shift 3") end)
+`), 0o644)
+	chords := []keymap.Chord{{Trigger: "F23", Target: "Super_R", TMod: "SUPER", Mods: []string{"SHIFT", "SUPER"}, Hide: []string{"Shift_L", "Super_L"}}}
+	wrapper := filepath.Join(dir, "wrapper.lua")
+	os.WriteFile(wrapper, []byte(luaWrapper(nil, 1, user, "/kb.xkb", chords)), 0o644)
+	fake := filepath.Join(dir, "fake.lua")
+	os.WriteFile(fake, []byte(`
+local down, binds = {}, {}
+local function norm(keys)
+  local parts = {}
+  for p in keys:gmatch("[^+]+") do parts[#parts + 1] = p:match("^%s*(.-)%s*$"):upper() end
+  local key = table.remove(parts)
+  table.sort(parts)
+  parts[#parts + 1] = key
+  return table.concat(parts, "+")
+end
+hl = {
+  is_key_down = function(k) return down[k] == true end,
+  bind = function(keys, action) binds[norm(keys)] = action end,
+  dsp = { exec_cmd = function(c) return { cmd = c } end },
+  config = function(c) print("kb_file " .. c.input.kb_file) end,
+  on = function() end, exec_cmd = function() end,
+}
+dofile(`+luaStr(wrapper)+`)
+local function press(keys, mods, key)
+  down = {}
+  for _, k in ipairs(keys) do down[k] = true end
+  local a = binds[norm(mods .. " + " .. key)]
+  if type(a) == "function" then a() elseif a then print("dispatch " .. a.cmd) else print("nothing") end
+end
+press({ "Super_L" }, "SUPER", "1")
+press({ "Super_L", "Shift_L", "F23" }, "SUPER + SHIFT", "1")
+press({ "Super_L", "Shift_L", "F23" }, "SUPER + SHIFT", "2")
+press({ "Super_L", "Shift_L", "F23" }, "SUPER + SHIFT", "3")
+press({ "Super_L", "Shift_L" }, "SUPER + SHIFT", "3")
+`), 0o644)
+	out, err := exec.Command(lua, fake).CombinedOutput()
+	if err != nil {
+		t.Fatal(err, string(out))
+	}
+	want := `kb_file /kb.xkb
+left 1
+right 1
+dispatch two
+super 3
+user shift 3
+`
+	if string(out) != want {
+		t.Fatalf("получилось:\n%s", out)
 	}
 }
