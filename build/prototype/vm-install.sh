@@ -46,7 +46,7 @@ mount "${dev}2" "$mnt"
 cp -r "$repo/dist/LOLSSD/." "$mnt/"
 mkdir -p "$mnt/windows"
 cp -r "$repo/dist/windows/." "$mnt/windows/"
-cp "$repo/build/prototype/apply.cmd" "$mnt/windows/"
+sed 's/\r*$/\r/' "$repo/build/prototype/apply.cmd" > "$mnt/windows/apply.cmd"
 umount "$mnt"
 rmdir "$mnt"
 sync

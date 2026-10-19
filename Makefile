@@ -20,8 +20,9 @@ dist:
 	# windowsgui: задания планировщика не открывают окно консоли; журнал пишется в файл.
 	GOOS=windows GOARCH=amd64 $(GO) build -trimpath -ldflags="-s -w -H windowsgui" -o "$(WIN)/Program Files/lolssd/lolssd-win.exe" ./cmd/lolssd-win
 	GOOS=linux GOARCH=amd64 $(GO) build $(GOFLAGS) -o dist/wsl/lolssd-wsl ./cmd/lolssd-wsl
-	cp build/setup/SetupComplete.cmd build/setup/lolssd-setup.ps1 "$(WIN)/Windows/Setup/Scripts/"
-	cp build/setup/lolssd.reg dist/windows/
+	# Файлы для Windows — с CRLF: cmd и reg import на LF спотыкаются.
+	for f in SetupComplete.cmd lolssd-setup.ps1; do sed 's/\r*$$/\r/' build/setup/$$f > "$(WIN)/Windows/Setup/Scripts/$$f"; done
+	sed 's/\r*$$/\r/' build/setup/lolssd.reg > dist/windows/lolssd.reg
 	cp README.md dist/LOLSSD/README.md
 	cp build/lolssd.sh dist/LOLSSD/lolssd.sh
 
