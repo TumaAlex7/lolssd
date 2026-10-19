@@ -83,5 +83,24 @@ Step 'register host disk mount task' {
     Register-ScheduledTask -TaskPath '\lolssd\' -TaskName 'mount' -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null
 }
 
+# Places the nested Hyprland output windows and handles Ctrl+Alt+F12. Runs in the user's
+# session, not elevated: it only moves the user's own windows.
+Step 'register window controller task' {
+    $exe = "$env:ProgramFiles\lolssd\lolssd-win.exe"
+    $action = New-ScheduledTaskAction -Execute $exe -Argument 'controller'
+    $trigger = New-ScheduledTaskTrigger -AtLogOn
+    $principal = New-ScheduledTaskPrincipal -GroupId 'BUILTIN\Users' -RunLevel Limited
+    $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+    Register-ScheduledTask -TaskPath '\lolssd\' -TaskName 'controller' -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
+}
+
+# Desktop shortcut that starts the host's desktop (asks for the LUKS password if any).
+Step 'Linux desktop shortcut' {
+    $lnk = (New-Object -ComObject WScript.Shell).CreateShortcut("$env:PUBLIC\Desktop\Linux.lnk")
+    $lnk.TargetPath = "$env:SystemRoot\System32\wsl.exe"
+    $lnk.Arguments = '-d lolssd -u root -- /usr/local/bin/lolssd-wsl session'
+    $lnk.Save()
+}
+
 Log "done, $failed step(s) failed"
 exit $failed

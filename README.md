@@ -53,6 +53,9 @@ GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o l
 - `lolssd-win mount` — при входе в Windows: если на SSD есть профиль этого компьютера
   (`lolssd profile`), подключает диски хоста в WSL для режима «Linux внутри Windows».
   Нет профиля — ничего не делает.
+- `lolssd-win controller` — после входа: ставит окна рабочего стола Linux на весь экран, каждое
+  на свой монитор. **Ctrl+Alt+F12** отдаёт монитор под курсором Windows (например, под игру) или
+  возвращает его Linux.
 
 ## Пусковой WSL-дистрибутив
 
