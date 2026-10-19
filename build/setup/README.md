@@ -1,53 +1,61 @@
-# Скрипты установки Windows
+# Настройка Windows при установке
 
-Выполняются один раз при установке Windows на SSD, а также при каждой повторной установке после
-`sysprep /generalize`, то есть при первой загрузке на новом компьютере. Поэтому все шаги
-идемпотентны: повторный запуск ничего не ломает.
+Два слоя:
 
-| Файл | Куда в образе | Когда и от чьего имени |
+| Файл | Что | Когда применяется |
 |---|---|---|
-| `lolssd-setup.ps1` | `C:\Windows\Setup\Scripts\` | вызывается двумя фазами ниже |
-| `SetupComplete.cmd` | `C:\Windows\Setup\Scripts\` | Windows запускает его сама от SYSTEM после установки, до первого входа → `-Phase Complete` |
-| — | — | `autounattend.xml`, проход `specialize`, `RunSynchronous` от SYSTEM, до OOBE → `-Phase Specialize` |
+| `lolssd.reg` | все настройки, которые сводятся к значениям реестра | **офлайн**, в кусты реестра образа до первой загрузки |
+| `lolssd-setup.ps1` + `SetupComplete.cmd` | то, что реестром не выразить | Windows сама запускает `SetupComplete.cmd` от SYSTEM после установки, до первого входа |
 
-В образ файлы попадают при сборке: либо добавляются в WIM офлайн, либо через папку
-`sources\$OEM$\$$\Setup\Scripts\` на установочном носителе. Её содержимое копируется в
-`C:\Windows\Setup\Scripts\` до прохода `specialize`.
+## Почему реестр офлайн
 
-Команда для `autounattend.xml`:
-```
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Windows\Setup\Scripts\lolssd-setup.ps1 -Phase Specialize
-```
+- **Действует с первой загрузки.** Запрет шифрования и часы в UTC работают до OOBE и до первого
+  выключения, не нужно успевать скриптом.
+- **Права доступа Windows не действуют.** Ключ службы `WaaSMedicSvc` защищён ACL даже от SYSTEM
+  на работающей системе. Если править куст снаружи, он выключается так же, как остальные.
+- **Нагляднее.** Список «ключ = значение» без логики, которая может упасть.
 
-## Что делается
+Файл написан с `CurrentControlSet`, чтобы его можно было и вручную выполнить через `reg import` на
+работающей Windows (кроме `WaaSMedicSvc`, который там не изменится). При офлайн-применении
+`CurrentControlSet` заменяется на `ControlSet001`, а ключи раскладываются по кустам
+`SYSTEM` и `SOFTWARE` (`Windows\System32\config\`). Офлайн-применение делается из Linux при сборке
+(через `hivexregedit`) — [сделать] вместе с остальной сборкой. Так же применяется после ручной
+установки через Rufus: смонтировать раздел Windows на SSD и применить.
 
-**Specialize** — то, что должно случиться до OOBE:
-- запрет автоматического шифрования устройства (иначе диск привяжется к TPM машины, на которой
-  его ставили);
-- SAN policy `OfflineInternal`: диски хоста остаются Offline, Windows их не монтирует;
-- `PortableOperatingSystem` (режим Windows To Go);
-- `RealTimeIsUniversal`: часы RTC в UTC, как у Linux.
+Содержимое `lolssd.reg`:
+- **безопасность хоста:** часы RTC в UTC, запрет автошифрования, `PortableOperatingSystem`,
+  SAN policy `OfflineInternal` (диски хоста Offline), без гибернации и быстрого запуска;
+- **замороженная Windows:** политики Windows Update, службы `wuauserv`/`UsoSvc`/`WaaSMedicSvc`
+  выключены, без автообновления Store;
+- **Vanguard:** VBS и HVCI;
+- **место:** без зарезервированного хранилища и точек восстановления;
+- **системный диск на USB:** политики питания — без отключения USB-портов и остановки дисков.
 
-**Complete**:
-- гибернация и быстрый запуск выключены;
-- Windows Update: политики, службы `wuauserv`/`UsoSvc`/`WaaSMedicSvc`, задания планировщика,
-  автообновление Store;
-- BitLocker выключается, если всё же включился;
-- VBS и HVCI (требование Vanguard, VAN 9005);
-- WSL и Virtual Machine Platform (для режима Linux внутри Windows);
-- отключение зарезервированного хранилища (~7 ГБ) и восстановления системы;
-- выключение экономии энергии для USB-портов и остановки дисков: системный диск висит на USB.
+## Скрипт
+
+`lolssd-setup.ps1` запускается при установке и снова после `sysprep /generalize`, то есть при первой
+загрузке на каждом новом компьютере. Все шаги идемпотентны:
+- `powercfg /hibernate off` — удалить `hiberfil.sys`, если установка его оставила;
+- выключить задания планировщика Windows Update (второй слой поверх выключенных служб);
+- выключить BitLocker, если шифрование успело начаться;
+- включить WSL и Virtual Machine Platform, `hypervisorlaunchtype auto`;
+- `DISM /Set-ReservedStorageState /State:Disabled` (значение в реестре срабатывает, только если
+  задано до создания резерва).
 
 Журнал: `C:\Windows\Setup\Scripts\lolssd-setup.log`, по строке на шаг (`ok` / `FAIL` с причиной).
-Сбой одного шага не останавливает остальные. Ожидаемые отказы — защищённые ACL `WaaSMedicSvc`
-и часть заданий `UpdateOrchestrator`: тогда обновления держат политики.
+Сбой одного шага не останавливает остальные.
 
-Скрипты на английском: Windows PowerShell 5.1 неправильно читает не-ASCII в файлах без BOM,
-а `cmd` — в любой кодировке, отличной от системной.
+В образ `lolssd-setup.ps1` и `SetupComplete.cmd` кладутся в `C:\Windows\Setup\Scripts\` (офлайн в
+образ или через `sources\$OEM$\$$\Setup\Scripts\` на установочном носителе).
+
+Файлы для Windows на английском: Windows PowerShell 5.1 неправильно читает не-ASCII в файлах без
+BOM, `cmd` и `reg import` — тоже кодировкозависимы.
 
 ## Проверено / не проверено
 
 - Синтаксис `lolssd-setup.ps1` разобран парсером PowerShell 7, вспомогательные функции прогнаны
-  на Linux.
-- **На Windows не запускался.** [проверить] каждый шаг на Windows 10 и 11, в том числе какие
-  из них реально отказывают по ACL.
+  на Linux; формат `lolssd.reg` проверен скриптом (только ASCII, только `dword`).
+- **На Windows ничего не запускалось.** [проверить] на Windows 10 и 11:
+  - сохраняет ли `sysprep /generalize` значения `SanPolicy` и `PortableOperatingSystem`;
+  - работают ли политики питания по GUID на USB-диске;
+  - какие задания `UpdateOrchestrator` реально отказывают по ACL.

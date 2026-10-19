@@ -1,0 +1,96 @@
+Windows Registry Editor Version 5.00
+
+; lolssd: machine settings, applied OFFLINE to the image's hives before the first boot.
+; Offline means: effective from the very first boot, and Windows ACLs do not apply
+; (WaaSMedicSvc below cannot be changed from a running system, even as SYSTEM).
+; Written with CurrentControlSet so the file also works with "reg import" on a running
+; system; the offline applier maps it to ControlSet001.
+; What and why: docs/ARCHITECTURE.md, sections 2 and 4.
+
+; ---------------------------------------------------------------- host safety
+
+; Linux keeps the RTC in UTC; without this the host clock shifts on every boot.
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\TimeZoneInformation]
+"RealTimeIsUniversal"=dword:00000001
+
+; Never auto-encrypt: it would bind the disk to the TPM of the machine it was set up on.
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\BitLocker]
+"PreventDeviceEncryption"=dword:00000001
+
+; Windows To Go behaviour: tolerates moving between machines.
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control]
+"PortableOperatingSystem"=dword:00000001
+
+; SAN policy OfflineInternal (same as diskpart "san policy=OfflineInternal"):
+; host disks stay offline, Windows never mounts or writes to them.
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\partmgr\Parameters]
+"SanPolicy"=dword:00000004
+
+; No hibernation and no fast startup: both leave NTFS dirty on a disk that may next
+; boot on another machine.
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Power]
+"HibernateEnabled"=dword:00000000
+"HibernateEnabledDefault"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager\Power]
+"HiberbootEnabled"=dword:00000000
+
+; ---------------------------------------------------------------- frozen Windows
+
+; An update needing several reboots would end up half-applied, and an unattended
+; reboot on someone else's machine is the worst case.
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate]
+"DoNotConnectToWindowsUpdateInternetLocations"=dword:00000001
+"ExcludeWUDriversInQualityUpdate"=dword:00000001
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU]
+"NoAutoUpdate"=dword:00000001
+"NoAutoRebootWithLoggedOnUsers"=dword:00000001
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\WindowsStore]
+"AutoDownload"=dword:00000002
+
+; Start=4: disabled. WaaSMedicSvc would otherwise re-enable the other two.
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\wuauserv]
+"Start"=dword:00000004
+
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\UsoSvc]
+"Start"=dword:00000004
+
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\WaaSMedicSvc]
+"Start"=dword:00000004
+
+; ---------------------------------------------------------------- Vanguard
+
+; VBS + HVCI (VAN 9005). VBS itself needs Secure Boot on the host.
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\DeviceGuard]
+"EnableVirtualizationBasedSecurity"=dword:00000001
+"RequirePlatformSecurityFeatures"=dword:00000001
+
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity]
+"Enabled"=dword:00000001
+
+; ---------------------------------------------------------------- disk space
+
+; Reserved storage (~7 GB for updates we never install). Only takes effect if set
+; before setup creates the reserve, so lolssd-setup.ps1 also disables it via DISM.
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\ReserveManager]
+"ShippedWithReserves"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows NT\SystemRestore]
+"DisableSR"=dword:00000001
+"DisableConfig"=dword:00000001
+
+; ---------------------------------------------------------------- USB system disk
+
+; Power policies by setting GUID: suspending the USB port or spinning the disk down
+; can drop the system disk from under the running system.
+; USB selective suspend
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Power\PowerSettings\48e6b7a6-50f5-4782-a5d4-53bb8f07e226]
+"ACSettingIndex"=dword:00000000
+"DCSettingIndex"=dword:00000000
+
+; Turn off hard disk after: never
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Power\PowerSettings\6738e2c4-e8a5-4a42-b16a-e040e769756e]
+"ACSettingIndex"=dword:00000000
+"DCSettingIndex"=dword:00000000
