@@ -106,21 +106,7 @@ func check() int {
 // usbSpeed находит USB-устройство, на котором лежит сам бинарник (раздел LOLSSD),
 // и проверяет скорость порта и драйвер (uas = UASP работает).
 func usbSpeed(report func(status, name, detail string)) {
-	exe, err := os.Executable()
-	if err == nil {
-		exe, err = filepath.EvalSymlinks(exe)
-	}
-	var st syscall.Stat_t
-	if err == nil {
-		err = syscall.Stat(exe, &st)
-	}
-	if err != nil {
-		report("WARN", "USB", "не удалось определить диск: "+err.Error())
-		return
-	}
-	major := (st.Dev>>8)&0xfff | (st.Dev>>32)&^0xfff
-	minor := st.Dev&0xff | (st.Dev>>12)&^0xff
-	dev, err := filepath.EvalSymlinks(fmt.Sprintf("/sys/dev/block/%d:%d", major, minor))
+	dev, err := exeBlockDev()
 	if err != nil {
 		report("INFO", "USB", "lolssd запущен не с блочного устройства, скорость не проверялась")
 		return
@@ -162,4 +148,22 @@ func usbSpeed(report func(status, name, detail string)) {
 	default:
 		report("INFO", "UASP", "драйвер не определён: "+driver)
 	}
+}
+
+// exeBlockDev возвращает каталог sysfs блочного устройства (обычно раздела), на котором лежит бинарник.
+func exeBlockDev() (string, error) {
+	exe, err := os.Executable()
+	if err == nil {
+		exe, err = filepath.EvalSymlinks(exe)
+	}
+	var st syscall.Stat_t
+	if err == nil {
+		err = syscall.Stat(exe, &st)
+	}
+	if err != nil {
+		return "", err
+	}
+	major := (st.Dev>>8)&0xfff | (st.Dev>>32)&^0xfff
+	minor := st.Dev&0xff | (st.Dev>>12)&^0xff
+	return filepath.EvalSymlinks(fmt.Sprintf("/sys/dev/block/%d:%d", major, minor))
 }
