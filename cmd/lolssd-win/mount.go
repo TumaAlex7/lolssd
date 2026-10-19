@@ -20,6 +20,28 @@ import (
 // Пусковой дистрибутив читает выбранный профиль отсюда (в WSL — /mnt/c/ProgramData/lolssd/).
 var activeProfile = filepath.Join(os.Getenv("ProgramData"), "lolssd", "active-profile.json")
 
+var monitorsPath = filepath.Join(os.Getenv("ProgramData"), "lolssd", "monitors.json")
+
+// wslConfigMark отличает наш .wslconfig от написанного пользователем: чужой не трогаем.
+const wslConfigMark = "# lolssd: generated, delete this line to keep your own settings"
+
+// writeWSLConfig: половина памяти Windows под WSL (но не меньше 4 ГиБ) и возврат
+// неиспользуемой памяти Windows — на 16 ГБ это важнее всего.
+func writeWSLConfig() error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(home, ".wslconfig")
+	if b, err := os.ReadFile(path); err == nil && !strings.HasPrefix(string(b), wslConfigMark) {
+		log.Println("свой .wslconfig пользователя, оставляю как есть")
+		return nil
+	}
+	mem := max(totalMemoryMiB()/2/1024, 4)
+	cfg := fmt.Sprintf("%s\r\n[wsl2]\r\nmemory=%dGB\r\nswap=4GB\r\nguiApplications=true\r\n\r\n[experimental]\r\nautoMemoryReclaim=gradual\r\n", wslConfigMark, mem)
+	return os.WriteFile(path, []byte(cfg), 0o644)
+}
+
 // mountHost готовит режим «Linux внутри Windows» (docs/ARCHITECTURE.md §6):
 // находит на разделе LOLSSD профиль этого компьютера, подключает диски хоста в WSL целиком
 // (--bare: разделы, LUKS и LVM поднимает уже пусковой дистрибутив) и сохраняет профиль для него.
@@ -88,6 +110,21 @@ func mountHost() int {
 		return 0
 	}
 	log.Printf("профиль %s (%s, %s)", best.MachineID, best.Distro.ID, best.User.Name)
+
+	// .wslconfig читается при старте ВМ WSL, а её запускает уже первый wsl --mount.
+	if err := writeWSLConfig(); err != nil {
+		log.Println(".wslconfig:", err)
+	}
+	mons, err := activeMonitors()
+	if err == nil {
+		var b []byte
+		if b, err = json.MarshalIndent(mons, "", "  "); err == nil {
+			err = os.WriteFile(monitorsPath, b, 0o644)
+		}
+	}
+	if err != nil {
+		log.Println("мониторы:", err)
+	}
 
 	disks := map[int]bool{}
 	for _, u := range best.PartUUIDs() {

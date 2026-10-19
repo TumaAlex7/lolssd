@@ -12,9 +12,10 @@ import (
 
 const (
 	profilePath = "/mnt/c/ProgramData/lolssd/active-profile.json"
-	rootDir     = "/run/lolssd/root"  // система хоста, на запись
 	checkDir    = "/run/lolssd/check" // временно, только чтение без восстановления журналов
 )
+
+var rootDir = "/run/lolssd/root" // система хоста, на запись; переменная — для тестов
 
 func main() {
 	if len(os.Args) < 2 {
@@ -31,12 +32,14 @@ func main() {
 		os.Exit(down())
 	case "run":
 		os.Exit(run(os.Args[2:]))
+	case "session":
+		os.Exit(session())
 	default:
 		usage()
 	}
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "использование: lolssd-wsl up | down | run [--] команда [аргументы]")
+	fmt.Fprintln(os.Stderr, "использование: lolssd-wsl up | down | session | run [--] команда [аргументы]")
 	os.Exit(2)
 }

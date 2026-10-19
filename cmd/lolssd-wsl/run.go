@@ -8,6 +8,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"lolssd/hostprofile"
 )
 
 // Хук pacman, который прерывает любую транзакцию с ядром или /boot. ESP хоста внутри Windows
@@ -32,9 +34,7 @@ AbortOnFail
 // не создавались на диске хоста.
 const inner = "/run/lolssd-wsl"
 
-// run запускает команду в системе хоста от имени пользователя профиля. Графика и звук идут
-// через WSLg, ускорение — через GPU-PV (/dev/dxg + d3d12 в Mesa хоста).
-// На диск хоста nspawn ничего не пишет: журнал, часовой пояс и resolv.conf не копируются.
+// run запускает команду в системе хоста от имени пользователя профиля.
 func run(args []string) int {
 	if len(args) > 0 && args[0] == "--" {
 		args = args[1:]
@@ -50,7 +50,13 @@ func run(args []string) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
+	return runIn(p, nil, args)
+}
 
+// runIn — systemd-nspawn без --boot. Графика и звук идут через WSLg, ускорение — через
+// GPU-PV (/dev/dxg + d3d12 в Mesa хоста). На диск хоста nspawn ничего не пишет: журнал,
+// часовой пояс и resolv.conf не копируются. extra — дополнительные аргументы nspawn.
+func runIn(p hostprofile.Profile, extra, args []string) int {
 	nspawn := []string{
 		"--quiet", "--as-pid2", "--register=no",
 		"--link-journal=no", "--timezone=off", "--resolv-conf=bind-host",
@@ -87,7 +93,7 @@ func run(args []string) int {
 	} else {
 		fmt.Fprintln(os.Stderr, "внимание: для", p.Distro.ID, "обновления ядра изнутри Windows не блокируются — не обновляйте систему отсюда")
 	}
-	nspawn = append(append(nspawn, "--"), args...)
+	nspawn = append(append(append(nspawn, extra...), "--"), args...)
 
 	cmd := exec.Command("systemd-nspawn", nspawn...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr

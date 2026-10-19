@@ -96,3 +96,22 @@ func (p Profile) PartUUIDs() []string {
 	}
 	return res
 }
+
+// WinMonitor — активный монитор Windows. Список пишет lolssd-win mount в monitors.json;
+// порядок в нём задаёт номер вложенного выхода Hyprland: первый — WAYLAND-1 и т. д.
+type WinMonitor struct {
+	Name    string  `json:"name"`
+	EDID    []byte  `json:"edid"`
+	X       int     `json:"x"`
+	Y       int     `json:"y"`
+	Width   int     `json:"width"`
+	Height  int     `json:"height"`
+	Refresh float64 `json:"refresh"`
+	Primary bool    `json:"primary"`
+}
+
+// SameMonitor сравнивает базовый блок EDID (первые 128 байт): DRM в Linux и реестр Windows
+// могут отдавать разный набор блоков расширения.
+func SameMonitor(a, b []byte) bool {
+	return len(a) >= 128 && len(b) >= 128 && string(a[:128]) == string(b[:128])
+}
