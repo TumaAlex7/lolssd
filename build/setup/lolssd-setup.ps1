@@ -63,5 +63,15 @@ Step 'reserved storage off' {
     Run dism.exe /Online /Set-ReservedStorageState /State:Disabled /Quiet
 }
 
+# Keeps the host's NVRAM clean of entries pointing at this SSD (lolssd-win nvram-guard).
+Step 'register NVRAM guard task' {
+    $exe = "$env:ProgramFiles\lolssd\lolssd-win.exe"
+    if (-not (Test-Path $exe)) { throw "$exe not found" }
+    $action = New-ScheduledTaskAction -Execute $exe -Argument 'nvram-guard'
+    $trigger = New-ScheduledTaskTrigger -AtStartup
+    $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+    Register-ScheduledTask -TaskPath '\lolssd\' -TaskName 'nvram-guard' -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null
+}
+
 Log "done, $failed step(s) failed"
 exit $failed

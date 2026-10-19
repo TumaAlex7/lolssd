@@ -41,6 +41,8 @@
 - включить WSL и Virtual Machine Platform, `hypervisorlaunchtype auto`;
 - `DISM /Set-ReservedStorageState /State:Disabled` (значение в реестре срабатывает, только если
   задано до создания резерва).
+- зарегистрировать задание планировщика `\lolssd\nvram-guard`: при каждом старте Windows от SYSTEM
+  запускает `C:\Program Files\lolssd\lolssd-win.exe nvram-guard` (бинарник кладётся туда при сборке).
 
 Журнал: `C:\Windows\Setup\Scripts\lolssd-setup.log`, по строке на шаг (`ok` / `FAIL` с причиной).
 Сбой одного шага не останавливает остальные.

@@ -38,3 +38,15 @@ CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o lolssd ./cmd/lolssd
 - `sudo lolssd boot` — перезагрузиться в Windows на SSD один раз. Порядок загрузки хоста не
   меняется: следующая загрузка после Windows снова идёт в Linux. `--no-reboot` только
   готовит загрузку, `--cleanup` удаляет созданную запись из NVRAM.
+
+## Windows-часть
+
+```
+GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o lolssd-win.exe ./cmd/lolssd-win
+```
+
+Кладётся в образ в `C:\Program Files\lolssd\`. Настройка Windows при установке: [build/setup](build/setup/README.md).
+
+- `lolssd-win nvram-guard` — при каждом старте Windows (задание планировщика от SYSTEM) убирает
+  из `BootOrder` хоста записи, ведущие на ESP этого SSD, а созданные самой Windows удаляет.
+  Чужие записи и их порядок не трогает. Журнал: `C:\ProgramData\lolssd\lolssd-win.log`.

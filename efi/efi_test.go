@@ -56,3 +56,18 @@ func TestReadGPT(t *testing.T) {
 		}
 	}
 }
+
+func TestStrip(t *testing.T) {
+	ssd := Part{Num: 1, First: 2048, Last: 4095, GUID: [16]byte{1}}
+	host := Part{Num: 1, First: 2048, Last: 4095, GUID: [16]byte{2}}
+	entries := map[uint16][]byte{
+		0: BuildLoadOption("Linux", `\EFI\systemd\systemd-bootx64.efi`, host),
+		1: BuildLoadOption("Windows Boot Manager", `\EFI\Microsoft\Boot\bootmgfw.efi`, ssd),
+		2: BuildLoadOption("lolssd", `\EFI\BOOT\BOOTX64.EFI`, ssd),
+		3: {0, 0}, // мусор не должен ломать разбор
+	}
+	order, remove := Strip([]uint16{1, 0, 2, 3}, entries, ssd.GUID, "lolssd")
+	if len(order) != 2 || order[0] != 0 || order[1] != 3 || len(remove) != 1 || remove[0] != 1 {
+		t.Fatal(order, remove)
+	}
+}

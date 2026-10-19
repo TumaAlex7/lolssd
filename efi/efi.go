@@ -152,3 +152,19 @@ func decodeUCS2(b []byte) string {
 	}
 	return string(utf16.Decode(u))
 }
+
+// Strip убирает из порядка загрузки записи, ведущие на раздел guid. Записи с описанием
+// keep (свои, ими управляет утилита хоста) только убираются из порядка, остальные
+// возвращаются в remove на удаление.
+func Strip(order []uint16, entries map[uint16][]byte, guid [16]byte, keep string) (newOrder, remove []uint16) {
+	for _, n := range order {
+		desc, g := ParseLoadOption(entries[n])
+		switch {
+		case g != guid:
+			newOrder = append(newOrder, n)
+		case desc != keep:
+			remove = append(remove, n)
+		}
+	}
+	return newOrder, remove
+}
