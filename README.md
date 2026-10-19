@@ -21,14 +21,19 @@ Vanguard (античит Riot) работает на уровне ядра Windo
 ни в виртуальной машине, ни в облачном гейминге. Остаётся настоящая Windows на настоящем
 железе. Этот проект делает её отдельным внешним диском, который не трогает систему хоста.
 
-## Сборка утилиты
+## Сборка
 
 ```
-CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o lolssd ./cmd/lolssd
+make dist   # все бинарники и скрипты в dist/, разложенные так, как они ложатся на SSD
+make wsl    # + пусковой WSL-дистрибутив dist/wsl/lolssd.tar (нужен docker или podman)
+make test
 ```
 
-Получается статический бинарник без зависимостей: его кладут на раздел `LOLSSD` и запускают
-на любом Linux.
+Все бинарники статические, без зависимостей.
+
+### Утилита для Linux (`dist/LOLSSD/host/lolssd`)
+
+Лежит на разделе `LOLSSD` и запускается на любом Linux.
 
 - `lolssd check` — подходит ли компьютер: UEFI, Secure Boot, TPM 2.0, виртуализация, IOMMU,
   память, а при запуске с SSD ещё скорость USB-порта и работает ли UASP. Ничего не меняет.
@@ -39,13 +44,9 @@ CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o lolssd ./cmd/lolssd
   меняется: следующая загрузка после Windows снова идёт в Linux. `--no-reboot` только
   готовит загрузку, `--cleanup` удаляет созданную запись из NVRAM.
 
-## Windows-часть
+### Windows-часть (`dist/windows/`)
 
-```
-GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o lolssd-win.exe ./cmd/lolssd-win
-```
-
-Кладётся в образ в `C:\Program Files\lolssd\`. Настройка Windows при установке: [build/setup](build/setup/README.md).
+`lolssd-win.exe` кладётся в образ в `C:\Program Files\lolssd\`. Настройка Windows при установке: [build/setup](build/setup/README.md).
 
 - `lolssd-win nvram-guard` — при каждом старте Windows (задание планировщика от SYSTEM) убирает
   из `BootOrder` хоста записи, ведущие на ESP этого SSD, а созданные самой Windows удаляет.
@@ -57,14 +58,11 @@ GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o l
   на свой монитор. **Ctrl+Alt+F12** отдаёт монитор под курсором Windows (например, под игру) или
   возвращает его Linux.
 
-## Пусковой WSL-дистрибутив
+### Пусковой WSL-дистрибутив (`dist/wsl/lolssd.tar`)
 
-```
-CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o lolssd-wsl ./cmd/lolssd-wsl
-```
-
-Кладётся в пусковой дистрибутив (минимальный Arch для WSL с `cryptsetup` и `lvm2`) в
-`/usr/local/bin/`. Команды (от root):
+Минимальный Arch (`archlinux:base` + `cryptsetup`, `lvm2`, `libxkbcommon`, `xkeyboard-config`) с
+`lolssd-wsl` в `/usr/local/bin/` и `wsl.conf` (systemd, root по умолчанию, `/mnt/c`). Импорт:
+`wsl --import lolssd C:\ProgramData\lolssd\wsl lolssd.tar`. Команды (от root):
 - `lolssd-wsl up` — поднять систему хоста по активному профилю. Сначала проверяет, что хост
   выключился чисто: не в гибернации, без незавершённого журнала ext4. Иначе отказ.
 - `lolssd-wsl run -- команда` — запустить программу хоста от вашего пользователя, с графикой
