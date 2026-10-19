@@ -1,15 +1,22 @@
 #!/usr/bin/env bash
 # lolssd, прототип: установить Windows на внешний SSD из Linux через QEMU (docs/PROTOTYPE.md).
-#   sudo build/prototype/vm-install.sh /dev/sdX Win11.iso
-# Размечает SSD (ESP + раздел LOLSSD, остальное — под Windows), кладёт на LOLSSD содержимое
-# dist/, затем запускает установку Windows в QEMU прямо на этот SSD. Окно QEMU открывается от
-# имени пользователя, вызвавшего sudo.
+#   sudo build/prototype/vm-install.sh /dev/sdX Win11.iso [РАЗМЕР_ПОД_WINDOWS, например 128G]
+# Размечает SSD: ESP, раздел LOLSSD, место под Windows. Без размера Windows отдаётся весь
+# остаток диска; с размером — столько гигабайт, а остаток становится разделом DATA (NTFS) для
+# своих файлов. Кладёт на LOLSSD содержимое dist/, затем запускает установку Windows в QEMU прямо
+# на этот диск. Окно QEMU открывается от имени пользователя, вызвавшего sudo.
 set -euo pipefail
 
 die() { echo "ошибка: $*" >&2; exit 1; }
 
-[[ $# == 2 ]] || die "использование: sudo $0 /dev/sdX Windows.iso"
+[[ $# == 2 || $# == 3 ]] || die "использование: sudo $0 /dev/sdX Windows.iso [размер под Windows, например 128G]"
 dev=$1 iso=$(realpath "$2")
+win_gib=
+if [[ $# == 3 ]]; then
+	[[ $3 =~ ^([0-9]+)[Gg]?$ ]] || die "размер — целое число гигабайт, например 128G"
+	win_gib=${BASH_REMATCH[1]}
+	(( win_gib >= 40 )) || die "под Windows с лолкой нужно не меньше 40G"
+fi
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 name=$(basename "$dev")
 
@@ -26,20 +33,37 @@ done
 code=/usr/share/edk2/x64/OVMF_CODE.4m.fd vars=/usr/share/edk2/x64/OVMF_VARS.4m.fd
 [[ -f $code && -f $vars ]] || die "нет OVMF ($code), sudo pacman -S edk2-ovmf"
 
+# 1 МиБ выравнивания + ESP 512 МиБ + LOLSSD 256 МиБ, дальше место под Windows.
+data_start_mib=
+if [[ -n $win_gib ]]; then
+	data_start_mib=$(( 1 + 512 + 256 + win_gib * 1024 ))
+	disk_mib=$(( $(blockdev --getsize64 "$dev") / 1024 / 1024 ))
+	(( disk_mib - data_start_mib >= 1024 )) || die "на диске $(( disk_mib / 1024 ))G — после ${win_gib}G под Windows не остаётся места под DATA; запустите без размера"
+	command -v mkfs.ntfs >/dev/null || die "нет mkfs.ntfs (sudo pacman -S ntfs-3g)"
+fi
+
 lsblk -o NAME,SIZE,MODEL,TRAN "$dev"
+if [[ -n $win_gib ]]; then
+	echo "Разметка: EFI 512M, LOLSSD 256M, Windows ${win_gib}G, DATA (NTFS) — остальное."
+else
+	echo "Разметка: EFI 512M, LOLSSD 256M, Windows — весь остаток диска."
+fi
 read -rp "Всё на $dev будет стёрто. Введите $name для подтверждения: " ans
 [[ $ans == "$name" ]] || die "отменено"
 
 # ESP и LOLSSD; дальше свободное место, туда ставится Windows (MSR и NTFS она создаст сама).
-# LOLSSD — тип «basic data», чтобы Windows дала ему букву.
-sfdisk --wipe always --wipe-partitions always "$dev" <<SFDISK
-label: gpt
-size=512MiB, type=uefi, name=EFI
-size=256MiB, type=EBD0A0A2-B9E5-4433-87C0-68B6B72699C7, name=LOLSSD
-SFDISK
+# LOLSSD и DATA — тип «basic data», чтобы Windows дала им буквы.
+basic=EBD0A0A2-B9E5-4433-87C0-68B6B72699C7
+{
+	echo "label: gpt"
+	echo "size=512MiB, type=uefi, name=EFI"
+	echo "size=256MiB, type=$basic, name=LOLSSD"
+	[[ -z $data_start_mib ]] || echo "start=${data_start_mib}MiB, type=$basic, name=DATA"
+} | sfdisk --wipe always --wipe-partitions always "$dev"
 udevadm settle
 mkfs.fat -F 32 -n EFI "${dev}1" >/dev/null
 mkfs.fat -F 32 -n LOLSSD "${dev}2" >/dev/null
+[[ -z $data_start_mib ]] || mkfs.ntfs --quick --label DATA "${dev}3" >/dev/null
 
 mnt=$(mktemp -d)
 mount "${dev}2" "$mnt"
@@ -59,7 +83,7 @@ setfacl -m "u:$SUDO_USER:rw" "$dev"
 trap 'setfacl -x "u:$SUDO_USER" "$dev"; rm -rf "$work"' EXIT
 
 echo "Запускаю QEMU. В начале нажмите любую клавишу, чтобы загрузиться с ISO."
-echo "В установщике: «У меня нет ключа», редакция Pro, диск — незанятое место после LOLSSD."
+echo "В установщике: «У меня нет ключа», редакция Pro, диск — незанятое место (единственное)."
 # Диск по AHCI: драйвер есть в Windows из коробки. Сети нет: так OOBE не просит учётку Microsoft.
 # autounattend.xml — на виртуальной USB-флешке из каталога (vvfat), установщик ищет его там.
 sudo -u "$SUDO_USER" --preserve-env=WAYLAND_DISPLAY,DISPLAY,XDG_RUNTIME_DIR \
