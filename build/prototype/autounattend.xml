@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  lolssd, prototype install in QEMU (docs/PROTOTYPE.md). Deliberately partial:
+  setup still asks for the language, the product key ("I don't have a product key")
+  and the disk (pick the unallocated space after the LOLSSD partition).
+  It bypasses the TPM/Secure Boot/RAM checks of the VM, creates a local administrator
+  "lol" with an empty password and autologon, and runs apply.cmd from the LOLSSD partition
+  at the first logon.
+-->
+<unattend xmlns="urn:schemas-microsoft-com:unattend" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+  <settings pass="windowsPE">
+    <component name="Microsoft-Windows-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+      <RunSynchronous>
+        <RunSynchronousCommand wcm:action="add">
+          <Order>1</Order>
+          <Path>reg add HKLM\SYSTEM\Setup\LabConfig /v BypassTPMCheck /t REG_DWORD /d 1 /f</Path>
+        </RunSynchronousCommand>
+        <RunSynchronousCommand wcm:action="add">
+          <Order>2</Order>
+          <Path>reg add HKLM\SYSTEM\Setup\LabConfig /v BypassSecureBootCheck /t REG_DWORD /d 1 /f</Path>
+        </RunSynchronousCommand>
+        <RunSynchronousCommand wcm:action="add">
+          <Order>3</Order>
+          <Path>reg add HKLM\SYSTEM\Setup\LabConfig /v BypassRAMCheck /t REG_DWORD /d 1 /f</Path>
+        </RunSynchronousCommand>
+      </RunSynchronous>
+      <UserData>
+        <AcceptEula>true</AcceptEula>
+      </UserData>
+    </component>
+  </settings>
+  <settings pass="specialize">
+    <component name="Microsoft-Windows-Deployment" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+      <RunSynchronous>
+        <RunSynchronousCommand wcm:action="add">
+          <Order>1</Order>
+          <Path>reg add HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE /v BypassNRO /t REG_DWORD /d 1 /f</Path>
+        </RunSynchronousCommand>
+      </RunSynchronous>
+    </component>
+    <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+      <ComputerName>lolssd</ComputerName>
+    </component>
+  </settings>
+  <settings pass="oobeSystem">
+    <component name="Microsoft-Windows-International-Core" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+      <InputLocale>en-US;ru-RU</InputLocale>
+      <SystemLocale>en-US</SystemLocale>
+      <UserLocale>ru-RU</UserLocale>
+    </component>
+    <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+      <OOBE>
+        <HideEULAPage>true</HideEULAPage>
+        <HideOnlineAccountScreens>true</HideOnlineAccountScreens>
+        <HideWirelessSetupInOOBE>true</HideWirelessSetupInOOBE>
+        <ProtectYourPC>3</ProtectYourPC>
+      </OOBE>
+      <UserAccounts>
+        <LocalAccounts>
+          <LocalAccount wcm:action="add">
+            <Name>lol</Name>
+            <Group>Administrators</Group>
+            <Password>
+              <Value></Value>
+              <PlainText>true</PlainText>
+            </Password>
+          </LocalAccount>
+        </LocalAccounts>
+      </UserAccounts>
+      <AutoLogon>
+        <Enabled>true</Enabled>
+        <Username>lol</Username>
+        <Password>
+          <Value></Value>
+          <PlainText>true</PlainText>
+        </Password>
+        <LogonCount>9999999</LogonCount>
+      </AutoLogon>
+      <FirstLogonCommands>
+        <SynchronousCommand wcm:action="add">
+          <Order>1</Order>
+          <CommandLine>cmd /c for %d in (D E F G H I) do @if exist %d:\windows\apply.cmd start "lolssd" %d:\windows\apply.cmd</CommandLine>
+          <Description>lolssd: put files in place and configure Windows</Description>
+        </SynchronousCommand>
+      </FirstLogonCommands>
+    </component>
+  </settings>
+</unattend>

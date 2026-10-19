@@ -153,8 +153,13 @@ func usbSpeed(report func(status, name, detail string)) {
 }
 
 // exeBlockDev возвращает каталог sysfs блочного устройства (обычно раздела), на котором лежит бинарник.
+// LOLSSD_ROOT подменяет место бинарника: lolssd.sh запускает копию из /tmp, потому что udisks
+// монтирует FAT с showexec и запустить файл прямо с раздела нельзя.
 func exeBlockDev() (string, error) {
 	exe, err := os.Executable()
+	if root := os.Getenv("LOLSSD_ROOT"); root != "" {
+		exe, err = root, nil
+	}
 	if err == nil {
 		exe, err = filepath.EvalSymlinks(exe)
 	}

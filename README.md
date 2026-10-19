@@ -13,7 +13,7 @@ Linux продолжает работать внутри этой Windows — т
 
 ## Статус
 
-Проектирование. Архитектура и план проверок: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Проектирование и первый прототип. Архитектура: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), прогон прототипа: [docs/PROTOTYPE.md](docs/PROTOTYPE.md).
 
 ## Почему так
 
@@ -34,6 +34,8 @@ make test
 ### Утилита для Linux (`dist/LOLSSD/host/lolssd`)
 
 Лежит на разделе `LOLSSD` и запускается на любом Linux.
+
+Запуск с раздела: `sh /run/media/$USER/LOLSSD/lolssd.sh <команда>` (udisks монтирует FAT без права запуска файлов, скрипт запускает копию из `/tmp`).
 
 - `lolssd check` — подходит ли компьютер: UEFI, Secure Boot, TPM 2.0, виртуализация, IOMMU,
   память, а при запуске с SSD ещё скорость USB-порта и работает ли UASP. Ничего не меняет.

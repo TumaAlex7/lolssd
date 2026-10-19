@@ -50,14 +50,11 @@ Windows Registry Editor Version 5.00
 [HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\WindowsStore]
 "AutoDownload"=dword:00000002
 
-; Start=4: disabled. WaaSMedicSvc would otherwise re-enable the other two.
+; Start=4: disabled. WaaSMedicSvc (re-enables the other two) is at the very end of the file.
 [HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\wuauserv]
 "Start"=dword:00000004
 
 [HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\UsoSvc]
-"Start"=dword:00000004
-
-[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\WaaSMedicSvc]
 "Start"=dword:00000004
 
 ; ---------------------------------------------------------------- Vanguard
@@ -94,3 +91,10 @@ Windows Registry Editor Version 5.00
 [HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Power\PowerSettings\6738e2c4-e8a5-4a42-b16a-e040e769756e]
 "ACSettingIndex"=dword:00000000
 "DCSettingIndex"=dword:00000000
+
+; ---------------------------------------------------------------- last on purpose
+
+; ACL-protected on a running system: "reg import" stops at the first error, so this key
+; goes last and everything above is already applied. Offline it is written like any other.
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\WaaSMedicSvc]
+"Start"=dword:00000004

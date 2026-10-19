@@ -23,6 +23,7 @@ dist:
 	cp build/setup/SetupComplete.cmd build/setup/lolssd-setup.ps1 "$(WIN)/Windows/Setup/Scripts/"
 	cp build/setup/lolssd.reg dist/windows/
 	cp README.md dist/LOLSSD/README.md
+	cp build/lolssd.sh dist/LOLSSD/lolssd.sh
 
 # Нужен docker или podman. Результат: dist/wsl/lolssd.tar для
 #   wsl --import lolssd C:\ProgramData\lolssd\wsl lolssd.tar
