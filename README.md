@@ -24,7 +24,7 @@ Vanguard (античит Riot) работает на уровне ядра Windo
 ## Сборка утилиты
 
 ```
-cd host && CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o lolssd .
+CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o lolssd ./cmd/lolssd
 ```
 
 Получается статический бинарник без зависимостей: его кладут на раздел `LOLSSD` и запускают

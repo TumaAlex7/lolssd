@@ -1,3 +1,5 @@
+//go:build linux
+
 // lolssd — утилита для Linux-хоста, лежит на разделе LOLSSD внешнего SSD.
 package main
 
