@@ -32,6 +32,9 @@ cd host && CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o lolssd .
 
 - `lolssd check` — подходит ли компьютер: UEFI, Secure Boot, TPM 2.0, виртуализация, IOMMU,
   память, а при запуске с SSD ещё скорость USB-порта и работает ли UASP. Ничего не меняет.
+- `lolssd profile` — описать систему для режима «Linux внутри Windows» и сохранить описание
+  на SSD (`profiles/<machine-id>.json`): что монтировать (включая LUKS, LVM, подтомы btrfs),
+  пользователя, мониторы с EDID. Запускается без sudo, ничего не меняет.
 - `sudo lolssd boot` — перезагрузиться в Windows на SSD один раз. Порядок загрузки хоста не
   меняется: следующая загрузка после Windows снова идёт в Linux. `--no-reboot` только
   готовит загрузку, `--cleanup` удаляет созданную запись из NVRAM.

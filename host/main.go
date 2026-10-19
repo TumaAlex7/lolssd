@@ -15,12 +15,14 @@ func main() {
 		os.Exit(check())
 	case "boot":
 		os.Exit(boot(os.Args[2:]))
+	case "profile":
+		os.Exit(runProfile())
 	default:
 		usage()
 	}
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "использование: lolssd check | boot [--no-reboot] | boot --cleanup")
+	fmt.Fprintln(os.Stderr, "использование: lolssd check | profile | boot [--no-reboot] | boot --cleanup")
 	os.Exit(2)
 }
