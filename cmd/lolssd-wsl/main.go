@@ -1,0 +1,42 @@
+//go:build linux
+
+// lolssd-wsl — пусковой инструмент внутри WSL-дистрибутива на SSD (docs/ARCHITECTURE.md §6).
+// Поднимает систему хоста по активному профилю и запускает в ней программы через systemd-nspawn.
+// Запускается от root: wsl.exe -d lolssd -u root -- lolssd-wsl <команда>.
+package main
+
+import (
+	"fmt"
+	"os"
+)
+
+const (
+	profilePath = "/mnt/c/ProgramData/lolssd/active-profile.json"
+	rootDir     = "/run/lolssd/root"  // система хоста, на запись
+	checkDir    = "/run/lolssd/check" // временно, только чтение без восстановления журналов
+)
+
+func main() {
+	if len(os.Args) < 2 {
+		usage()
+	}
+	if os.Geteuid() != 0 {
+		fmt.Fprintln(os.Stderr, "нужны права root: wsl.exe -d lolssd -u root -- lolssd-wsl ...")
+		os.Exit(1)
+	}
+	switch os.Args[1] {
+	case "up":
+		os.Exit(up())
+	case "down":
+		os.Exit(down())
+	case "run":
+		os.Exit(run(os.Args[2:]))
+	default:
+		usage()
+	}
+}
+
+func usage() {
+	fmt.Fprintln(os.Stderr, "использование: lolssd-wsl up | down | run [--] команда [аргументы]")
+	os.Exit(2)
+}

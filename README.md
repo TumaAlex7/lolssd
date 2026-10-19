@@ -53,3 +53,17 @@ GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o l
 - `lolssd-win mount` — при входе в Windows: если на SSD есть профиль этого компьютера
   (`lolssd profile`), подключает диски хоста в WSL для режима «Linux внутри Windows».
   Нет профиля — ничего не делает.
+
+## Пусковой WSL-дистрибутив
+
+```
+CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o lolssd-wsl ./cmd/lolssd-wsl
+```
+
+Кладётся в пусковой дистрибутив (минимальный Arch для WSL с `cryptsetup` и `lvm2`) в
+`/usr/local/bin/`. Команды (от root):
+- `lolssd-wsl up` — поднять систему хоста по активному профилю. Сначала проверяет, что хост
+  выключился чисто: не в гибернации, без незавершённого журнала ext4. Иначе отказ.
+- `lolssd-wsl run -- команда` — запустить программу хоста от вашего пользователя, с графикой
+  через WSLg и ускорением через GPU-PV. Обновления ядра изнутри Windows заблокированы.
+- `lolssd-wsl down` — опустить всё обратно.
