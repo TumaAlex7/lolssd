@@ -73,5 +73,15 @@ Step 'register NVRAM guard task' {
     Register-ScheduledTask -TaskPath '\lolssd\' -TaskName 'nvram-guard' -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null
 }
 
+# Linux inside Windows: at every logon of an administrator (the autologon user), elevated,
+# because wsl --mount requires it. Without a profile for this machine it exits quietly.
+Step 'register host disk mount task' {
+    $exe = "$env:ProgramFiles\lolssd\lolssd-win.exe"
+    $action = New-ScheduledTaskAction -Execute $exe -Argument 'mount'
+    $trigger = New-ScheduledTaskTrigger -AtLogOn
+    $principal = New-ScheduledTaskPrincipal -GroupId 'BUILTIN\Administrators' -RunLevel Highest
+    Register-ScheduledTask -TaskPath '\lolssd\' -TaskName 'mount' -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null
+}
+
 Log "done, $failed step(s) failed"
 exit $failed

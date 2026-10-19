@@ -71,3 +71,11 @@ func TestStrip(t *testing.T) {
 		t.Fatal(order, remove)
 	}
 }
+
+func TestGUIDString(t *testing.T) {
+	// GUID записи «UEFI OS» ноутбука автора и PARTUUID его /boot.
+	g := [16]byte{0x9b, 0x5e, 0xd8, 0x8d, 0x2e, 0x75, 0x60, 0x45, 0xa8, 0x2f, 0x56, 0x11, 0x2a, 0xa3, 0x24, 0xbf}
+	if s := GUIDString(g); s != "8dd85e9b-752e-4560-a82f-56112aa324bf" {
+		t.Fatal(s)
+	}
+}

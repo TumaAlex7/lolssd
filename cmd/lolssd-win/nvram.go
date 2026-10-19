@@ -80,10 +80,32 @@ func nvramGuard() int {
 
 // systemESP находит ESP на диске, с которого загружена Windows (то есть на этом SSD).
 func systemESP() (efi.Part, error) {
+	n, err := systemDisk()
+	if err != nil {
+		return efi.Part{}, err
+	}
+	parts, err := diskGPT(n)
+	if err != nil {
+		return efi.Part{}, err
+	}
+	var esps []efi.Part
+	for _, p := range parts {
+		if p.Type == efi.ESPType {
+			esps = append(esps, p)
+		}
+	}
+	if len(esps) != 1 {
+		return efi.Part{}, fmt.Errorf("системный диск %d: ожидался один ESP, найдено %d", n, len(esps))
+	}
+	return esps[0], nil
+}
+
+// systemDisk возвращает номер физического диска, на котором лежит системный том.
+func systemDisk() (int, error) {
 	vol, err := windows.CreateFile(windows.StringToUTF16Ptr(`\\.\`+os.Getenv("SystemDrive")),
 		0, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE, nil, windows.OPEN_EXISTING, 0, 0)
 	if err != nil {
-		return efi.Part{}, err
+		return 0, err
 	}
 	defer windows.CloseHandle(vol)
 
@@ -99,29 +121,25 @@ func systemESP() (efi.Part, error) {
 	const ioctlVolumeGetVolumeDiskExtents = 0x00560000
 	if err := windows.DeviceIoControl(vol, ioctlVolumeGetVolumeDiskExtents, nil, 0,
 		(*byte)(unsafe.Pointer(&ext)), uint32(unsafe.Sizeof(ext)), &n, nil); err != nil {
-		return efi.Part{}, fmt.Errorf("номер диска системного тома: %w", err)
+		return 0, fmt.Errorf("номер диска системного тома: %w", err)
 	}
+	return int(ext.DiskNumber), nil
+}
 
-	disk := fmt.Sprintf(`\\.\PhysicalDrive%d`, ext.DiskNumber)
-	f, err := os.Open(disk)
+// diskGPT читает GPT физического диска напрямую (нужны права администратора).
+// Работает и для дисков в состоянии Offline.
+func diskGPT(n int) ([]efi.Part, error) {
+	path := fmt.Sprintf(`\\.\PhysicalDrive%d`, n)
+	f, err := os.Open(path)
 	if err != nil {
-		return efi.Part{}, err
+		return nil, err
 	}
 	defer f.Close()
 	parts, err := efi.ReadGPT(f)
 	if err != nil {
-		return efi.Part{}, fmt.Errorf("%s: %w", disk, err)
+		return nil, fmt.Errorf("%s: %w", path, err)
 	}
-	var esps []efi.Part
-	for _, p := range parts {
-		if p.Type == efi.ESPType {
-			esps = append(esps, p)
-		}
-	}
-	if len(esps) != 1 {
-		return efi.Part{}, fmt.Errorf("%s: ожидался один ESP, найдено %d", disk, len(esps))
-	}
-	return esps[0], nil
+	return parts, nil
 }
 
 func getVar(name string) ([]byte, error) {

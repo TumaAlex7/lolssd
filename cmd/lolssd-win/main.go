@@ -26,12 +26,14 @@ func main() {
 	switch os.Args[1] {
 	case "nvram-guard":
 		os.Exit(nvramGuard())
+	case "mount":
+		os.Exit(mountHost())
 	default:
 		usage()
 	}
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: lolssd-win nvram-guard")
+	fmt.Fprintln(os.Stderr, "usage: lolssd-win nvram-guard | mount")
 	os.Exit(2)
 }

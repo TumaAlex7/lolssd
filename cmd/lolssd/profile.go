@@ -12,79 +12,19 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"lolssd/hostprofile"
 )
 
-// Профиль хоста для режима «Linux внутри Windows» (docs/ARCHITECTURE.md §6).
-// Только данные: что и как монтировать, кто пользователь, какие мониторы.
-// Решения о том, что выполнять, принимает пусковой дистрибутив на SSD.
-type profile struct {
-	Version   int       `json:"version"`
-	MachineID string    `json:"machine_id"`
-	Created   time.Time `json:"created"`
-	Distro    struct {
-		ID     string `json:"id"`
-		IDLike string `json:"id_like,omitempty"`
-	} `json:"distro"`
-	User struct {
-		Name  string `json:"name"`
-		UID   int    `json:"uid"`
-		GID   int    `json:"gid"`
-		Home  string `json:"home"`
-		Shell string `json:"shell"`
-	} `json:"user"`
-	Desktop    string    `json:"desktop"`
-	HyprConfig string    `json:"hypr_config,omitempty"`
-	MesaD3D12  bool      `json:"mesa_d3d12"`
-	MemMiB     int       `json:"mem_mib"`
-	Mounts     []mount   `json:"mounts"`
-	Swaps      []swap    `json:"swaps"`
-	Monitors   []monitor `json:"monitors"`
-}
-
-type mount struct {
-	Target  string   `json:"target"`
-	FSType  string   `json:"fstype"`
-	Subvol  string   `json:"subvol,omitempty"`
-	Options string   `json:"options"`
-	Device  blockDev `json:"device"`
-}
-
-// blockDev — цепочка устройств от точки монтирования вниз до раздела:
-// например lvm → luks → partition.
-type blockDev struct {
-	Name      string     `json:"name"`
-	Kind      string     `json:"kind"` // partition, luks, lvm, dm
-	DMName    string     `json:"dm_name,omitempty"`
-	LUKSUUID  string     `json:"luks_uuid,omitempty"`
-	Disk      *disk      `json:"disk,omitempty"`
-	Partition int        `json:"partition,omitempty"`
-	PartUUID  string     `json:"partuuid,omitempty"`
-	Lower     []blockDev `json:"lower,omitempty"`
-}
-
-type disk struct {
-	Name   string `json:"name"`
-	Model  string `json:"model"`
-	Serial string `json:"serial"`
-}
-
-type swap struct {
-	Path   string   `json:"path"`
-	Type   string   `json:"type"` // file, partition
-	Device blockDev `json:"device"`
-}
-
-type monitor struct {
-	Port    string  `json:"port"`
-	EDID    []byte  `json:"edid"`
-	Desc    string  `json:"desc,omitempty"`
-	X       int     `json:"x"`
-	Y       int     `json:"y"`
-	Width   int     `json:"width,omitempty"`
-	Height  int     `json:"height,omitempty"`
-	Scale   float64 `json:"scale,omitempty"`
-	Refresh float64 `json:"refresh,omitempty"`
-}
+// Типы профиля общие с Windows-частью, см. пакет hostprofile.
+type (
+	profile  = hostprofile.Profile
+	mount    = hostprofile.Mount
+	blockDev = hostprofile.BlockDev
+	disk     = hostprofile.Disk
+	swap     = hostprofile.Swap
+	monitor  = hostprofile.Monitor
+)
 
 var hostFS = map[string]bool{"ext4": true, "ext3": true, "btrfs": true, "xfs": true, "f2fs": true}
 

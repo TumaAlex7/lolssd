@@ -168,3 +168,9 @@ func Strip(order []uint16, entries map[uint16][]byte, guid [16]byte, keep string
 	}
 	return newOrder, remove
 }
+
+// GUIDString переводит GUID из порядка байт GPT в привычную запись (как PARTUUID в Linux).
+func GUIDString(g [16]byte) string {
+	le := binary.LittleEndian
+	return fmt.Sprintf("%08x-%04x-%04x-%x-%x", le.Uint32(g[0:]), le.Uint16(g[4:]), le.Uint16(g[6:]), g[8:10], g[10:])
+}

@@ -50,3 +50,6 @@ GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o l
 - `lolssd-win nvram-guard` — при каждом старте Windows (задание планировщика от SYSTEM) убирает
   из `BootOrder` хоста записи, ведущие на ESP этого SSD, а созданные самой Windows удаляет.
   Чужие записи и их порядок не трогает. Журнал: `C:\ProgramData\lolssd\lolssd-win.log`.
+- `lolssd-win mount` — при входе в Windows: если на SSD есть профиль этого компьютера
+  (`lolssd profile`), подключает диски хоста в WSL для режима «Linux внутри Windows».
+  Нет профиля — ничего не делает.
