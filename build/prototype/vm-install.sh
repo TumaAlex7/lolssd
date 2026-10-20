@@ -83,7 +83,7 @@ setfacl -m "u:$SUDO_USER:rw" "$dev"
 trap 'setfacl -x "u:$SUDO_USER" "$dev"; rm -rf "$work"' EXIT
 
 echo "Запускаю QEMU. В начале нажмите любую клавишу, чтобы загрузиться с ISO."
-echo "В установщике: «У меня нет ключа», редакция Pro, диск — незанятое место (единственное)."
+echo "В установщике: «У меня нет ключа», редакция как у заводской Windows ноутбука (обычно Home), диск — незанятое место."
 # Диск по AHCI: драйвер есть в Windows из коробки. Сети нет: так OOBE не просит учётку Microsoft.
 # autounattend.xml — на виртуальной USB-флешке из каталога (vvfat), установщик ищет его там.
 sudo -u "$SUDO_USER" --preserve-env=WAYLAND_DISPLAY,DISPLAY,XDG_RUNTIME_DIR \
