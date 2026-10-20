@@ -27,10 +27,12 @@ name=$(basename "$dev")
 ! grep -q "^/dev/$name" /proc/mounts || die "разделы $dev смонтированы, отмонтируйте их"
 [[ -f $iso ]] || die "нет ISO $iso"
 [[ -d $repo/dist/LOLSSD && -d $repo/dist/windows ]] || die "сначала make dist"
-for t in qemu-system-x86_64 sfdisk mkfs.fat; do
-	command -v "$t" >/dev/null || die "нет $t (sudo pacman -S qemu-desktop edk2-ovmf dosfstools)"
+for t in qemu-system-x86_64 sfdisk mkfs.fat swtpm; do
+	command -v "$t" >/dev/null || die "нет $t (sudo pacman -S qemu-desktop edk2-ovmf dosfstools swtpm)"
 done
-code=/usr/share/edk2/x64/OVMF_CODE.4m.fd vars=/usr/share/edk2/x64/OVMF_VARS.4m.fd
+# Прошивка с поддержкой Secure Boot и виртуальный TPM 2.0: установщик Windows 11 проверяет оба,
+# обход через LabConfig в новом установщике срабатывает не всегда.
+code=/usr/share/edk2/x64/OVMF_CODE.secboot.4m.fd vars=/usr/share/edk2/x64/OVMF_VARS.4m.fd
 [[ -f $code && -f $vars ]] || die "нет OVMF ($code), sudo pacman -S edk2-ovmf"
 
 # 1 МиБ выравнивания + ESP 512 МиБ + LOLSSD 256 МиБ, дальше место под Windows.
@@ -78,16 +80,23 @@ sync
 work=$(mktemp -d)
 cp "$repo/build/prototype/autounattend.xml" "$work/"
 cp "$vars" "$work/OVMF_VARS.fd"
+mkdir "$work/tpm"
 chown -R "$SUDO_USER" "$work"
 setfacl -m "u:$SUDO_USER:rw" "$dev"
 trap 'setfacl -x "u:$SUDO_USER" "$dev"; rm -rf "$work"' EXIT
+
+# swtpm живёт, пока к нему подключён QEMU, и завершается вместе с ним (--terminate).
+sudo -u "$SUDO_USER" swtpm socket --tpm2 --tpmstate dir="$work/tpm" \
+	--ctrl type=unixio,path="$work/tpm/sock" --terminate --daemon
 
 echo "Запускаю QEMU. В начале нажмите любую клавишу, чтобы загрузиться с ISO."
 echo "В установщике: «У меня нет ключа», редакция как у заводской Windows ноутбука (обычно Home), диск — незанятое место."
 # Диск по AHCI: драйвер есть в Windows из коробки. Сети нет: так OOBE не просит учётку Microsoft.
 # autounattend.xml — на виртуальной USB-флешке из каталога (vvfat), установщик ищет его там.
 sudo -u "$SUDO_USER" --preserve-env=WAYLAND_DISPLAY,DISPLAY,XDG_RUNTIME_DIR \
-	qemu-system-x86_64 -enable-kvm -machine q35 -cpu host -smp 4 -m 6G \
+	qemu-system-x86_64 -enable-kvm -machine q35,smm=on -cpu host -smp 4 -m 6G \
+	-global driver=cfi.pflash01,property=secure,value=on \
+	-chardev socket,id=tpm,path="$work/tpm/sock" -tpmdev emulator,id=tpm0,chardev=tpm -device tpm-crb,tpmdev=tpm0 \
 	-drive if=pflash,format=raw,readonly=on,file="$code" \
 	-drive if=pflash,format=raw,file="$work/OVMF_VARS.fd" \
 	-device ahci,id=ahci \
