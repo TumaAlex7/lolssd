@@ -93,7 +93,7 @@ sudo -u "$SUDO_USER" --preserve-env=WAYLAND_DISPLAY,DISPLAY,XDG_RUNTIME_DIR \
 	-device ahci,id=ahci \
 	-drive if=none,id=ssd,format=raw,cache=none,file="$dev" -device ide-hd,drive=ssd,bus=ahci.0,bootindex=1 \
 	-drive if=none,id=cd,media=cdrom,file="$iso" -device ide-cd,drive=cd,bus=ahci.1,bootindex=0 \
-	-device qemu-xhci -drive if=none,id=unattend,format=raw,file="fat:$work" -device usb-storage,drive=unattend \
+	-device qemu-xhci -drive if=none,id=unattend,format=raw,readonly=on,file="fat:$work" -device usb-storage,drive=unattend \
 	-device usb-tablet -nic none
 
 echo "QEMU закрыт. Если apply.cmd отработал и Windows выключена — можно грузиться с SSD: sudo lolssd boot"
