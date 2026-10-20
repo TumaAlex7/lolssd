@@ -24,6 +24,12 @@ reg import "%SRC%lolssd.reg"
 powershell -NoProfile -ExecutionPolicy Bypass -File "%SystemRoot%\Setup\Scripts\lolssd-setup.ps1"
 echo.
 type "%SystemRoot%\Setup\Scripts\lolssd-setup.log"
+
+rem Drivers from \drivers on this disk's volumes (skips itself inside the VM).
+echo.
+echo Installing drivers from \drivers folders, this can take a few minutes...
+powershell -NoProfile -ExecutionPolicy Bypass -File "%ProgramFiles%\lolssd\lolssd-drivers.ps1" -Force
+if exist "%ProgramData%\lolssd\lolssd-drivers.log" type "%ProgramData%\lolssd\lolssd-drivers.log"
 echo.
 echo Done. Shut down this VM, then boot the SSD on the real machine (sudo lolssd boot).
 pause

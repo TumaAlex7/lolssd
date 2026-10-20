@@ -83,6 +83,16 @@ Step 'register host disk mount task' {
     Register-ScheduledTask -TaskPath '\lolssd\' -TaskName 'mount' -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null
 }
 
+# Drivers for a new machine from \drivers on the disk's volumes (Windows Update is off).
+Step 'register driver install task' {
+    $ps = "$env:ProgramFiles\lolssd\lolssd-drivers.ps1"
+    if (-not (Test-Path $ps)) { throw "$ps not found" }
+    $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$ps`""
+    $trigger = New-ScheduledTaskTrigger -AtStartup
+    $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+    Register-ScheduledTask -TaskPath '\lolssd\' -TaskName 'drivers' -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null
+}
+
 # Places the nested Hyprland output windows and handles Ctrl+Alt+F12. Runs in the user's
 # session, not elevated: it only moves the user's own windows.
 Step 'register window controller task' {
