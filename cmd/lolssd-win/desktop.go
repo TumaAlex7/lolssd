@@ -11,9 +11,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"syscall"
 	"time"
 	"unsafe"
+
+	"golang.org/x/sys/windows"
 
 	"lolssd/winctl"
 )
@@ -27,14 +28,13 @@ var (
 )
 
 const (
-	hotkeyToggle     = 1
-	wmHotkey         = 0x0312
-	wmTimer          = 0x0113
-	modAlt           = 0x1
-	modControl       = 0x2
-	modNoRepeat      = 0x4000
-	vkF12            = 0x7b
-	createNewConsole = 0x00000010
+	hotkeyToggle = 1
+	wmHotkey     = 0x0312
+	wmTimer      = 0x0113
+	modAlt       = 0x1
+	modControl   = 0x2
+	modNoRepeat  = 0x4000
+	vkF12        = 0x7b
 )
 
 type msg struct {
@@ -77,17 +77,19 @@ func desktop() int {
 	}
 	monsJSON, _ := json.Marshal(mons)
 
-	sess := exec.Command("wsl.exe", "-d", "lolssd", "-u", "root", "--", "/bin/sh", "-c",
-		`/usr/local/bin/lolssd-wsl session || { echo; echo "Enter — закрыть"; read x; }`)
-	sess.Env = append(os.Environ(), "LOLSSD_MONITORS="+string(monsJSON),
-		"WSLENV="+os.Getenv("WSLENV")+":LOLSSD_MONITORS")
-	sess.SysProcAttr = &syscall.SysProcAttr{CreationFlags: createNewConsole}
-	if err := sess.Start(); err != nil {
+	// Вывод сеанса — и в консоль, и в session.log рядом с журналом (читается и из Linux).
+	// При ошибке консоль ждёт Enter.
+	script := `{ /usr/local/bin/lolssd-wsl session; echo $? >/run/lolssd-rc; } 2>&1 | tee /mnt/c/ProgramData/lolssd/session.log
+rc=$(cat /run/lolssd-rc); [ "$rc" = 0 ] || { echo; echo "Ошибка (код $rc), вывод в C:\\ProgramData\\lolssd\\session.log. Enter — закрыть"; read x; }`
+	os.Setenv("LOLSSD_MONITORS", string(monsJSON))
+	os.Setenv("WSLENV", os.Getenv("WSLENV")+":LOLSSD_MONITORS")
+	sess, err := startConsole("wsl.exe", "-d", "lolssd", "-u", "root", "--", "/bin/sh", "-c", script)
+	if err != nil {
 		log.Println("wsl.exe:", err)
 		return 1
 	}
 	sessDone := make(chan struct{})
-	go func() { sess.Wait(); close(sessDone) }()
+	go func() { windows.WaitForSingleObject(sess, windows.INFINITE); close(sessDone) }()
 	log.Printf("сеанс запущен, мониторов %d", len(mons))
 
 	if r, _, err := procRegisterHotKey.Call(0, hotkeyToggle, modControl|modAlt|modNoRepeat, vkF12); r == 0 {
@@ -169,6 +171,25 @@ func desktop() int {
 			}
 		}
 	}
+}
+
+// startConsole запускает программу в новой консоли с её собственными вводом и выводом.
+// os/exec так не умеет: незаданные Stdin/Stdout/Stderr он подставляет как NUL, и консоль
+// остаётся пустой, а read в ней сразу получает конец файла.
+func startConsole(args ...string) (windows.Handle, error) {
+	exe, err := exec.LookPath(args[0])
+	if err != nil {
+		return 0, err
+	}
+	si := windows.StartupInfo{Cb: uint32(unsafe.Sizeof(windows.StartupInfo{}))}
+	var pi windows.ProcessInformation
+	cmdline, _ := windows.UTF16PtrFromString(windows.ComposeCommandLine(args))
+	app, _ := windows.UTF16PtrFromString(exe)
+	if err := windows.CreateProcess(app, cmdline, nil, nil, false, windows.CREATE_NEW_CONSOLE, nil, nil, &si, &pi); err != nil {
+		return 0, err
+	}
+	windows.CloseHandle(pi.Thread)
+	return pi.Process, nil
 }
 
 func listening(port int) bool {

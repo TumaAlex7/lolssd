@@ -130,11 +130,8 @@ func ensureAquamarine(p hostprofile.Profile) (string, error) {
 	if len(libs) == 0 {
 		return "", fmt.Errorf("в системе хоста нет libaquamarine (Hyprland не установлен?)")
 	}
-	base := filepath.Base(libs[0]) // libaquamarine.so.0.15.1
-	version := strings.TrimPrefix(base, "libaquamarine.so.0.")
-	if strings.HasPrefix(base, "libaquamarine.so.") && !strings.HasPrefix(base, "libaquamarine.so.0.") {
-		version = strings.TrimPrefix(base, "libaquamarine.so.")
-	}
+	base := filepath.Base(libs[0])                           // libaquamarine.so.0.15.1
+	version := strings.TrimPrefix(base, "libaquamarine.so.") // 0.15.1, тег v0.15.1
 	dir := filepath.Join(aqCache, version)
 	lib := filepath.Join(dir, "lib", base)
 	if _, err := os.Stat(lib); err == nil {
