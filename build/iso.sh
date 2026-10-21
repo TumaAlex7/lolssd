@@ -5,8 +5,8 @@
 #
 # Что получается (dist/iso/lolssd-<имя исходного ISO>):
 #   - в install.wim только одна редакция: установщик не спрашивает какую;
-#   - образ почищен, как tiny11, настоящим DISM в WinPE внутри QEMU (build/tiny.sh), и
-#     lolssd.reg уже применён к его реестру;
+#   - из образа удалены Edge и OneDrive, lolssd.reg применён к его реестру (build/debloat.sh);
+#     приложения и компоненты Windows удаляет DISM в виртуалке установки (lolssd-setup.ps1);
 #   - наши файлы лежат прямо в образе Windows, установщик ничего не докачивает и не копирует:
 #       \Windows\Setup\Scripts\   SetupComplete.cmd, lolssd-setup.ps1, lolssd.reg
 #       \Program Files\lolssd\    lolssd-win.exe, lolssd-drivers.ps1
@@ -29,8 +29,8 @@ dist=$repo/dist
 out=$dist/iso/lolssd-$(basename "$src")
 work=$dist/iso/work
 
-for t in 7z wimlib-imagex xorriso qemu-system-x86_64; do
-	command -v "$t" >/dev/null || die "нет $t (sudo pacman -S p7zip wimlib libisoburn qemu-desktop edk2-ovmf)"
+for t in 7z wimlib-imagex xorriso hivexregedit; do
+	command -v "$t" >/dev/null || die "нет $t (sudo pacman -S p7zip wimlib libisoburn hivex)"
 done
 [[ -f $src ]] || die "нет $src"
 [[ -d $dist/windows ]] || die "сначала make dist"
@@ -50,9 +50,8 @@ wimlib-imagex info "$work/install.wim" "$edition" >/dev/null 2>&1 ||
 wimlib-imagex export "$work/install.wim" "$edition" "$work/tree/sources/install.wim" >/dev/null
 rm "$work/install.wim"
 
-echo "3/6 чистка образа как tiny11: DISM в виртуальной машине (приложения, компоненты, Edge, OneDrive, lolssd.reg)"
-"$repo/build/tiny.sh" "$work/tree" "$work/tree/sources/install.wim" "$dist/windows/lolssd.reg" "$work/clean.wim"
-mv "$work/clean.wim" "$work/tree/sources/install.wim"
+echo "3/6 чистка образа: Edge, OneDrive, lolssd.reg в реестр образа"
+"$repo/build/debloat.sh" "$work/tree/sources/install.wim" 1 "$dist/windows/lolssd.reg"
 
 echo "4/6 файлы lolssd в образ"
 {
@@ -68,6 +67,8 @@ echo "4/6 файлы lolssd в образ"
 } | wimlib-imagex update "$work/tree/sources/install.wim" 1 >/dev/null
 
 echo "5/6 разбиение образа"
+# update дописывает данные в конец файла; optimize собирает его заново без удалённого.
+wimlib-imagex optimize "$work/tree/sources/install.wim" >/dev/null
 size=$(stat -c %s "$work/tree/sources/install.wim")
 if (( size > 4000 * 1024 * 1024 )); then
 	wimlib-imagex split "$work/tree/sources/install.wim" "$work/tree/sources/install.swm" 3800 >/dev/null

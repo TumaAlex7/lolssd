@@ -23,7 +23,7 @@ Windows ставится на SSD из Linux через QEMU: SSD подключ
 
 1. Пакеты:
    ```
-   sudo pacman -S --needed qemu-desktop edk2-ovmf dosfstools acl swtpm ntfs-3g p7zip wimlib libisoburn
+   sudo pacman -S --needed qemu-desktop edk2-ovmf dosfstools acl swtpm ntfs-3g p7zip wimlib libisoburn hivex
    ```
 2. ISO Windows 11 с https://www.microsoft.com/software-download/windows11 (язык любой).
 3. **Драйверы** — INF-пакеты (папки с `.inf`, `.sys`, `.cat`), не установщики, в одной папке,

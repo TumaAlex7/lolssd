@@ -17,9 +17,8 @@
 
 Файл написан с `CurrentControlSet`, чтобы его можно было и вручную выполнить через `reg import` на
 работающей Windows (кроме `WaaSMedicSvc`, который там не изменится). В образ он попадает дважды:
-`make iso` применяет его к реестру образа в WinPE внутри QEMU (`reg load` кустов образа, пути
-переписаны на `HKLM\zSYSTEM\ControlSet001` и `HKLM\zSOFTWARE`), и файл ответов ещё раз
-импортирует его на проходе specialize — на случай, если что-то в образе не применилось.
+`make iso` применяет его к реестру образа прямо из Linux (`build/debloat.sh`, через `hivex`;
+`CurrentControlSet` → `ControlSet001`), и файл ответов ещё раз импортирует его на проходе specialize.
 
 Содержимое `lolssd.reg`:
 - **безопасность хоста:** часы RTC в UTC, запрет автошифрования, `PortableOperatingSystem`,

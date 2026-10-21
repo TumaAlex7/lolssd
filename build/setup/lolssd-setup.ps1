@@ -158,6 +158,21 @@ Step 'remove provisioned apps' {
     Log "      removed: $($removed -join ', ')"
 }
 
+# tiny11's set of Windows packages (IE, WordPad, Media Player, handwriting, OCR, speech...).
+# The same DISM servicing tiny11builder uses, on the full Windows of the install VM: WinPE's
+# DISM cannot service packages of a newer image (and has no AppX provider at all).
+$removePackages = 'Microsoft-Windows-(InternetExplorer-Optional-Package|Kernel-LA57-FoD-Package|LanguageFeatures-(Handwriting|OCR|Speech|TextToSpeech)|MediaPlayer-Package|TabletPCMath-Package|Wallpaper-Content-Extended-FoD-Package|WordPad-FoD-Package|StepsRecorder-Package)'
+Step 'remove Windows packages' {
+    $removed = @()
+    foreach ($p in Get-WindowsPackage -Online | Where-Object { $_.PackageName -match $removePackages -and $_.PackageState -eq 'Installed' }) {
+        try {
+            Remove-WindowsPackage -Online -PackageName $p.PackageName -NoRestart -ErrorAction Stop | Out-Null
+            $removed += $p.PackageName
+        } catch { Log "      could not remove $($p.PackageName): $_" }
+    }
+    Log "      removed: $($removed -join ', ')"
+}
+
 # OneDrive installs itself per user from the default profile's Run key.
 Step 'no OneDrive for new users' {
     Run reg.exe load 'HKU\lolssdDefault' "$env:SystemDrive\Users\Default\NTUSER.DAT"
