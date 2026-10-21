@@ -53,18 +53,7 @@ func runHyprland(p hostprofile.Profile, wins []hostprofile.WinMonitor, n int, cf
 		return 1
 	}
 
-	// Свой XDG_RUNTIME_DIR, короткий: путь к сокету Hyprland ограничен 108 байтами
-	// (с /run/lolssd-wsl/wslg/runtime-dir/hypr/<подпись>/ он не влезал), и его видит wayvnc.
-	os.RemoveAll(xdgDir)
-	if err := os.MkdirAll(xdgDir, 0o700); err == nil {
-		err = os.Chown(xdgDir, p.User.UID, p.User.GID)
-	}
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "XDG_RUNTIME_DIR:", err)
-		return 1
-	}
 	userRun := fmt.Sprintf("/run/user/%d", p.User.UID)
-
 	var modes []string
 	for _, w := range wins {
 		modes = append(modes, fmt.Sprintf("%dx%d", w.Width, w.Height))
@@ -72,7 +61,6 @@ func runHyprland(p hostprofile.Profile, wins []hostprofile.WinMonitor, n int, cf
 	if len(modes) == 0 {
 		modes = []string{"1920x1080"}
 	}
-
 	extra := []string{
 		"--bind-ro=" + sessionDir + ":" + inner + "/session",
 		"--bind-ro=" + filepath.Dir(filepath.Dir(lib)) + ":" + inner + "/aq",
@@ -80,29 +68,51 @@ func runHyprland(p hostprofile.Profile, wins []hostprofile.WinMonitor, n int, cf
 		"--bind=" + card,
 		"--property=DeviceAllow=char-drm rw",
 	}
-	// Без WAYLAND_DISPLAY aquamarine не пытается встать окном в WSLg и берёт headless-бэкенд.
-	// Рисует d3d12 через /dev/dxg (его пробрасывает runIn); без него — llvmpipe на CPU.
-	driver := "LP_NUM_THREADS=4"
-	if _, err := os.Stat("/dev/dxg"); err == nil {
-		driver = "GALLIUM_DRIVER=d3d12"
-	}
-	cmd := []string{"env", "-u", "WAYLAND_DISPLAY", "-u", "DISPLAY", driver,
-		"XDG_RUNTIME_DIR=" + userRun,
-		"AQ_HEADLESS_DRM_DEVICE=" + card,
-		"AQ_HEADLESS_MODES=" + strings.Join(modes, ","),
-		"LD_LIBRARY_PATH=" + aqLibIn + ":" + inner + "/lib/lib",
-		"Hyprland", "--config", cfg}
 
-	stop := make(chan struct{})
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		serveVNC(n, stop)
-	}()
-	fmt.Printf("Hyprland: %s на %s, выходов %d, VNC на 127.0.0.1:%d…%d\n", strings.Join(modes, ","), card, n, vncPort0+1, vncPort0+n)
-	code := runIn(p, extra, cmd)
-	close(stop)
-	<-done
+	// Рисует d3d12 через /dev/dxg, а если Hyprland с ним сразу падает — llvmpipe на CPU.
+	// d3d12 в контейнере ищет драйвер видеокарты по жёсткому пути /usr/lib/wsl/drivers, которого
+	// в системе хоста нет (docs/ARCHITECTURE.md §6, «Как композитор работает без экрана»).
+	drivers := []string{"GALLIUM_DRIVER=llvmpipe"}
+	if _, err := os.Stat("/dev/dxg"); err == nil {
+		drivers = append([]string{"GALLIUM_DRIVER=d3d12"}, drivers...)
+	}
+	code := 1
+	for i, driver := range drivers {
+		// Свой XDG_RUNTIME_DIR, короткий: путь к сокету Hyprland ограничен 108 байтами
+		// (с /run/lolssd-wsl/wslg/runtime-dir/hypr/<подпись>/ он не влезал), и его видит wayvnc.
+		os.RemoveAll(xdgDir)
+		if err := os.MkdirAll(xdgDir, 0o700); err == nil {
+			err = os.Chown(xdgDir, p.User.UID, p.User.GID)
+		}
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "XDG_RUNTIME_DIR:", err)
+			return 1
+		}
+		// Без WAYLAND_DISPLAY aquamarine не пытается встать окном в WSLg и берёт headless-бэкенд.
+		cmd := []string{"env", "-u", "WAYLAND_DISPLAY", "-u", "DISPLAY", driver, "LP_NUM_THREADS=4",
+			"XDG_RUNTIME_DIR=" + userRun,
+			"AQ_HEADLESS_DRM_DEVICE=" + card,
+			"AQ_HEADLESS_MODES=" + strings.Join(modes, ","),
+			"LD_LIBRARY_PATH=" + aqLibIn + ":" + inner + "/lib/lib",
+			"Hyprland", "--config", cfg}
+
+		stop := make(chan struct{})
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			serveVNC(n, stop)
+		}()
+		fmt.Printf("Hyprland (%s): %s на %s, выходов %d, VNC на 127.0.0.1:%d…%d\n",
+			driver, strings.Join(modes, ","), card, n, vncPort0+1, vncPort0+n)
+		began := time.Now()
+		code = runIn(p, extra, cmd)
+		close(stop)
+		<-done
+		if code == 0 || time.Since(began) > 20*time.Second || i == len(drivers)-1 {
+			break
+		}
+		fmt.Printf("\nHyprland с %s не запустился (код %d), пробую следующий вариант\n\n", driver, code)
+	}
 	return code
 }
 
