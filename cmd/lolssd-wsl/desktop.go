@@ -38,11 +38,13 @@ const (
 // runHyprland: vgem, пропатченный aquamarine, Hyprland без экрана и wayvnc на каждый выход.
 // Возвращается, когда Hyprland завершился.
 func runHyprland(p hostprofile.Profile, wins []hostprofile.WinMonitor, n int, cfg string) int {
-	card, err := vgemCard()
-	if err == nil {
-		// Узел создаётся root:video с правами 0660, а группа video пускового Debian — не та, что
-		// у пользователя хоста. Отдаём его пользователю сеанса: экрана у vgem нет, это только буферы.
-		err = os.Chown(card, p.User.UID, p.User.GID)
+	card, render, err := vgemNodes()
+	// Узлы создаются root:video/render с правами 0660, а группы пускового Debian — не те, что
+	// у пользователя хоста. Отдаём их пользователю сеанса: экрана у vgem нет, это только буферы.
+	for _, node := range []string{card, render} {
+		if err == nil {
+			err = os.Chown(node, p.User.UID, p.User.GID)
+		}
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -67,6 +69,7 @@ func runHyprland(p hostprofile.Profile, wins []hostprofile.WinMonitor, n int, cf
 		"--bind-ro=" + filepath.Dir(filepath.Dir(lib)) + ":" + inner + "/aq",
 		"--bind=" + xdgDir + ":" + userRun,
 		"--bind=" + card,
+		"--bind=" + render, // на нём рендерер Hyprland открывает GBM для EGL
 		"--property=DeviceAllow=char-drm rw",
 	}
 
@@ -177,25 +180,36 @@ ls -l /dev/dri; ls "$1" 2>/dev/null | head -20; "$out" ` + card
 	fmt.Println()
 }
 
-// vgemCard загружает vgem и возвращает его основной узел. Буферы выделяются через него:
-// через render-узел vgem выделять не даёт.
-func vgemCard() (string, error) {
+// vgemNodes загружает vgem и возвращает его узлы: основной и render. Буферы aquamarine выделяет
+// через основной (через render vgem выделять не даёт), а рендерер Hyprland, когда EGL не может
+// открыть устройство напрямую, создаёт GBM для EGL на render-узле.
+func vgemNodes() (card, render string, err error) {
 	if out, err := exec.Command("modprobe", "vgem").CombinedOutput(); err != nil {
-		return "", fmt.Errorf("modprobe vgem: %v: %s", err, out)
+		return "", "", fmt.Errorf("modprobe vgem: %v: %s", err, out)
 	}
+	node := regexp.MustCompile(`/(card|renderD)\d+$`)
 	for range 20 {
-		cards, _ := filepath.Glob("/sys/class/drm/card*")
-		for _, c := range cards {
-			if !regexp.MustCompile(`/card\d+$`).MatchString(c) {
+		nodes, _ := filepath.Glob("/sys/class/drm/*")
+		for _, c := range nodes {
+			m := node.FindStringSubmatch(c)
+			if m == nil {
 				continue
 			}
-			if dev, _ := filepath.EvalSymlinks(filepath.Join(c, "device")); filepath.Base(dev) == "vgem" {
-				return "/dev/dri/" + filepath.Base(c), nil
+			if dev, _ := filepath.EvalSymlinks(filepath.Join(c, "device")); filepath.Base(dev) != "vgem" {
+				continue
 			}
+			if m[1] == "card" {
+				card = "/dev/dri/" + filepath.Base(c)
+			} else {
+				render = "/dev/dri/" + filepath.Base(c)
+			}
+		}
+		if card != "" && render != "" {
+			return card, render, nil
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	return "", fmt.Errorf("после modprobe vgem устройство vgem не появилось в /sys/class/drm")
+	return "", "", fmt.Errorf("после modprobe vgem его узлы не появились в /sys/class/drm (card %q, render %q)", card, render)
 }
 
 // ensureAquamarine возвращает пропатченный libaquamarine под версию хоста. Собирается один раз
