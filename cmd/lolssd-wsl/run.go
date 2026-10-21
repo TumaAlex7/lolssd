@@ -32,7 +32,10 @@ AbortOnFail
 
 // Внутри контейнера всё WSL-шное лежит под /run (tmpfs nspawn), чтобы точки монтирования
 // не создавались на диске хоста.
-const inner = "/run/lolssd-wsl"
+const (
+	inner     = "/run/lolssd-wsl"
+	sharedTmp = "/run/lolssd/tmp" // /tmp контейнеров, в памяти пускового дистрибутива
+)
 
 // run запускает команду в системе хоста от имени пользователя профиля.
 func run(args []string) int {
@@ -81,7 +84,8 @@ func runIn(p hostprofile.Profile, extra, args []string) int {
 		"--bind=/mnt/wslg:" + inner + "/wslg",
 		"--bind-ro=/usr/lib/wsl:" + inner + "/lib",
 		// /tmp хоста — каталог на его диске (в памяти он только при обычной загрузке хоста).
-		"--tmpfs=/tmp",
+		// Один на все запуски, как в самой системе: оболочка и рабочий стол видят одно и то же.
+		"--bind=" + sharedTmp + ":/tmp",
 		"--bind=/mnt/wslg/.X11-unix:/tmp/.X11-unix",
 		"--setenv=XDG_RUNTIME_DIR=" + inner + "/wslg/runtime-dir",
 		"--setenv=WAYLAND_DISPLAY=wayland-0",
@@ -90,6 +94,14 @@ func runIn(p hostprofile.Profile, extra, args []string) int {
 		"--setenv=GALLIUM_DRIVER=d3d12",
 		"--setenv=LD_LIBRARY_PATH=" + inner + "/lib/lib",
 		"--setenv=LOLSSD=wsl",
+	}
+	err := os.MkdirAll(sharedTmp, 0o755)
+	if err == nil {
+		err = os.Chmod(sharedTmp, 0o777|os.ModeSticky) // как у /tmp: 1777
+	}
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "/tmp:", err)
+		return 1
 	}
 	// Без GPU-PV (старый драйвер видеокарты, выключенный WSLg) работаем на llvmpipe.
 	if _, err := os.Stat("/dev/dxg"); err == nil {
