@@ -71,6 +71,11 @@ Windows ставится на SSD из Linux через QEMU: SSD подключ
 
 ## 2. Первая загрузка ноутбука с SSD
 
+0. Сначала профиль хоста — без него ярлыки «Linux shell (host)» и «Linux desktop (host)» не
+   работают («профилей нет» в `lolssd-win.log`):
+   ```
+   sh /run/media/$USER/LOLSSD/lolssd.sh profile
+   ```
 1. В Linux, SSD подключён к порту **USB 10 Гбит/с**:
    ```
    sh /run/media/$USER/LOLSSD/lolssd.sh check
