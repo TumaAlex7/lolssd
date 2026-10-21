@@ -80,6 +80,8 @@ func runIn(p hostprofile.Profile, extra, args []string) int {
 		"-D", rootDir, "--user=" + p.User.Name, "--chdir=" + p.User.Home,
 		"--bind=/mnt/wslg:" + inner + "/wslg",
 		"--bind-ro=/usr/lib/wsl:" + inner + "/lib",
+		// /tmp хоста — каталог на его диске (в памяти он только при обычной загрузке хоста).
+		"--tmpfs=/tmp",
 		"--bind=/mnt/wslg/.X11-unix:/tmp/.X11-unix",
 		"--setenv=XDG_RUNTIME_DIR=" + inner + "/wslg/runtime-dir",
 		"--setenv=WAYLAND_DISPLAY=wayland-0",

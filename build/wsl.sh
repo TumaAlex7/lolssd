@@ -76,6 +76,7 @@ rm -rf "$r"/var/lib/apt/lists/*
 install -m 0755 "$dist/wsl/lolssd-wsl" "$r/usr/local/bin/lolssd-wsl"
 install -m 0644 "$repo/build/wsl/wsl.conf" "$r/etc/wsl.conf"
 install -Dm 0644 "$repo/build/hypr/aquamarine-headless-device.patch" "$r/usr/local/share/lolssd/aquamarine-headless-device.patch"
+install -Dm 0644 "$repo/build/hypr/gbm-probe.c" "$r/usr/local/share/lolssd/gbm-probe.c"
 echo LANG=C.UTF-8 >"$r/etc/default/locale" # иначе pam_env ругается при каждом входе
 : >"$r/etc/resolv.conf" # WSL создаёт свой при запуске
 

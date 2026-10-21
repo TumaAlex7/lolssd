@@ -27,11 +27,12 @@ import (
 //     полноэкранным TigerVNC (lolssd-win desktop).
 
 const (
-	aqCache  = "/var/cache/lolssd/aquamarine" // в пусковом дистрибутиве, по версиям
-	aqPatch  = "/usr/local/share/lolssd/aquamarine-headless-device.patch"
-	xdgDir   = "/run/lolssd/xdg" // XDG_RUNTIME_DIR сеанса, общий с wayvnc
-	vncPort0 = 5900              // выход N — порт 5900+N
-	aqLibIn  = inner + "/aq/lib" // кэш внутри контейнера
+	aqCache     = "/var/cache/lolssd/aquamarine" // в пусковом дистрибутиве, по версиям
+	aqPatch     = "/usr/local/share/lolssd/aquamarine-headless-device.patch"
+	xdgDir      = "/run/lolssd/xdg" // XDG_RUNTIME_DIR сеанса, общий с wayvnc
+	vncPort0    = 5900              // выход N — порт 5900+N
+	aqLibIn     = inner + "/aq/lib" // кэш внутри контейнера
+	gbmProbeSrc = "/usr/local/share/lolssd/gbm-probe.c"
 )
 
 // runHyprland: vgem, пропатченный aquamarine, Hyprland без экрана и wayvnc на каждый выход.
@@ -108,12 +109,36 @@ func runHyprland(p hostprofile.Profile, wins []hostprofile.WinMonitor, n int, cf
 		code = runIn(p, extra, cmd)
 		close(stop)
 		<-done
-		if code == 0 || time.Since(began) > 20*time.Second || i == len(drivers)-1 {
+		if code == 0 || time.Since(began) > 20*time.Second {
+			break
+		}
+		gbmProbe(p, extra, cmd[:len(cmd)-3], card) // окружение то же, без «Hyprland --config cfg»
+		if i == len(drivers)-1 {
 			break
 		}
 		fmt.Printf("\nHyprland с %s не запустился (код %d), пробую следующий вариант\n\n", driver, code)
 	}
 	return code
+}
+
+// gbmProbe собирает в контейнере build/hypr/gbm-probe.c и запускает его с окружением Hyprland:
+// почему GBM не создаётся на устройстве (dlopen библиотек Mesa, драйвер, gbm_create_device).
+// Вывод — в консоль и session.log.
+func gbmProbe(p hostprofile.Profile, extra, env []string, card string) {
+	src, err := os.ReadFile(gbmProbeSrc)
+	if err == nil {
+		err = os.WriteFile(filepath.Join(sessionDir, "gbm-probe.c"), src, 0o644)
+	}
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "gbm-probe:", err)
+		return
+	}
+	fmt.Println("\nдиагностика GBM:")
+	script := `set -e; out=$(mktemp); cc -o "$out" ` + inner + `/session/gbm-probe.c -ldl
+ls -l /dev/dri; ls "$1" 2>/dev/null | head -20; "$out" ` + card
+	args := append(append([]string{}, env...), "sh", "-c", script, "sh", inner+"/lib/lib")
+	runIn(p, extra, args)
+	fmt.Println()
 }
 
 // vgemCard загружает vgem и возвращает его основной узел. Буферы выделяются через него:
