@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -140,8 +141,7 @@ func mountHost() int {
 	failed := 0
 	for n := range disks {
 		dev := fmt.Sprintf(`\\.\PHYSICALDRIVE%d`, n)
-		cmd := exec.Command("wsl.exe", "--mount", dev, "--bare")
-		cmd.Env = append(os.Environ(), "WSL_UTF8=1") // иначе wsl.exe пишет в UTF-16
+		cmd := hidden("wsl.exe", "--mount", dev, "--bare")
 		out, err := cmd.CombinedOutput()
 		msg := strings.TrimSpace(string(out))
 		// Повторный запуск (диск уже подключён) — не ошибка.
@@ -198,6 +198,16 @@ func applyScancodeMap(p hostprofile.Profile) bool {
 	return true
 }
 
+// hidden запускает консольную программу без окна: lolssd-win собран без консоли (windowsgui),
+// и иначе каждый wsl.exe открывал бы своё окно при входе в Windows.
+func hidden(name string, args ...string) *exec.Cmd {
+	cmd := exec.Command(name, args...)
+	cmd.Env = append(os.Environ(), "WSL_UTF8=1") // иначе wsl.exe пишет в UTF-16
+	const createNoWindow = 0x08000000
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: createNoWindow}
+	return cmd
+}
+
 // ensureDistro импортирует пусковой WSL-дистрибутив из образа (\ProgramData\lolssd\wsl), если он
 // ещё не зарегистрирован у этого пользователя: WSL регистрирует дистрибутивы на пользователя.
 // Не выйдет до первой перезагрузки после включения компонентов WSL — тогда при следующем входе.
@@ -209,8 +219,7 @@ func ensureDistro() {
 		return
 	}
 	wsl := func(args ...string) (string, error) {
-		cmd := exec.Command("wsl.exe", args...)
-		cmd.Env = append(os.Environ(), "WSL_UTF8=1")
+		cmd := hidden("wsl.exe", args...)
 		out, err := cmd.CombinedOutput()
 		return strings.TrimSpace(string(out)), err
 	}
