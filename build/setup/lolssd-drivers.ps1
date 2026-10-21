@@ -25,7 +25,13 @@ $known = (Test-Path $seen) -and ((Get-Content $seen) -contains $machine)
 $missing = @(Get-CimInstance Win32_PnPEntity | Where-Object { $_.ConfigManagerErrorCode -eq 28 })
 $basicDisplay = @(Get-CimInstance Win32_VideoController | Where-Object { $_.Name -match 'Basic Display' })
 
-if (-not $Force -and $known -and -not $missing -and -not $basicDisplay) { exit 0 }
+# Devices that stayed without a driver after the last install on this machine (ACPI helpers,
+# SM Bus...): we have nothing for them, so they alone are no reason to run pnputil every boot.
+$skipFile = "$dir\drivers-none-$machine.txt"
+$skip = if (Test-Path $skipFile) { @(Get-Content $skipFile) } else { @() }
+$newMissing = @($missing | Where-Object { $skip -notcontains $_.PNPDeviceID })
+
+if (-not $Force -and $known -and -not $newMissing -and -not $basicDisplay) { exit 0 }
 Log "machine $machine ($($cs.Manufacturer) $($cs.Model)): new=$(-not $known) missing=$($missing.Count) basicDisplay=$($basicDisplay.Count) force=$Force"
 foreach ($d in $missing) { Log "      no driver: $($d.Name) [$($d.PNPDeviceID)]" }
 
@@ -44,5 +50,7 @@ foreach ($v in Get-Volume | Where-Object DriveLetter) {
 }
 
 if (-not $known) { Add-Content -Path $seen -Value $machine }
+@(Get-CimInstance Win32_PnPEntity | Where-Object { $_.ConfigManagerErrorCode -eq 28 } | ForEach-Object { $_.PNPDeviceID }) |
+    Set-Content -Path $skipFile
 Log "done, $failed failed"
 exit $failed

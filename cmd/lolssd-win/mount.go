@@ -230,14 +230,18 @@ func ensureDistro() {
 		out, err := cmd.CombinedOutput()
 		return strings.TrimSpace(string(out)), err
 	}
+	// wsl --list пишет в UTF-16 даже при WSL_UTF8=1: убираем нулевые байты, иначе имя не узнать.
 	if list, err := wsl(time.Minute, "--list", "--quiet"); err == nil {
-		for _, name := range strings.Fields(list) {
+		for _, name := range strings.Fields(strings.ReplaceAll(list, "\x00", "")) {
 			if strings.EqualFold(name, "lolssd") {
 				return
 			}
 		}
 	}
 	if out, err := wsl(10*time.Minute, "--import", "lolssd", filepath.Join(dir, "distro"), tar); err != nil {
+		if strings.Contains(out, "ALREADY_EXISTS") {
+			return
+		}
 		log.Printf("wsl --import lolssd: %v: %s", err, out)
 		return
 	}
