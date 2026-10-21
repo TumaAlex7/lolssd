@@ -57,6 +57,7 @@ func writeWSLConfig() error {
 func mountHost() int {
 	os.Remove(activeProfile)
 	ensureDistro()
+	fixShortcuts()
 
 	vol, err := lolssdVolume()
 	if err != nil {
@@ -217,14 +218,19 @@ func hidden(timeout time.Duration, name string, args ...string) *exec.Cmd {
 
 // ensureDistro импортирует пусковой WSL-дистрибутив из образа (\ProgramData\lolssd\wsl), если он
 // ещё не зарегистрирован у этого пользователя: WSL регистрирует дистрибутивы на пользователя.
+// Если lolssd.tar сменился (обновление SSD), дистрибутив импортируется заново: в нём ничего
+// своего нет, только кэш (пропатченный aquamarine), он соберётся снова.
 // Не выйдет до первой перезагрузки после включения компонентов WSL — тогда при следующем входе.
 // Нужен и без профиля хоста: в нём открывается ярлык «Linux terminal (SSD)».
 func ensureDistro() {
 	dir := filepath.Join(os.Getenv("ProgramData"), "lolssd", "wsl")
 	tar := filepath.Join(dir, "lolssd.tar")
-	if _, err := os.Stat(tar); err != nil {
+	st, err := os.Stat(tar)
+	if err != nil {
 		return
 	}
+	stampFile := filepath.Join(dir, "lolssd.tar.imported")
+	stamp := fmt.Sprintf("%d %d", st.Size(), st.ModTime().Unix())
 	wsl := func(timeout time.Duration, args ...string) (string, error) {
 		cmd := hidden(timeout, "wsl.exe", args...)
 		out, err := cmd.CombinedOutput()
@@ -233,9 +239,17 @@ func ensureDistro() {
 	// wsl --list пишет в UTF-16 даже при WSL_UTF8=1: убираем нулевые байты, иначе имя не узнать.
 	if list, err := wsl(time.Minute, "--list", "--quiet"); err == nil {
 		for _, name := range strings.Fields(strings.ReplaceAll(list, "\x00", "")) {
-			if strings.EqualFold(name, "lolssd") {
+			if !strings.EqualFold(name, "lolssd") {
+				continue
+			}
+			if old, _ := os.ReadFile(stampFile); string(old) == stamp {
 				return
 			}
+			if out, err := wsl(5*time.Minute, "--unregister", "lolssd"); err != nil {
+				log.Printf("lolssd.tar обновлён, но wsl --unregister lolssd: %v: %s", err, out)
+				return
+			}
+			log.Println("lolssd.tar обновлён, пусковой дистрибутив импортируется заново")
 		}
 	}
 	if out, err := wsl(10*time.Minute, "--import", "lolssd", filepath.Join(dir, "distro"), tar); err != nil {
@@ -245,7 +259,30 @@ func ensureDistro() {
 		log.Printf("wsl --import lolssd: %v: %s", err, out)
 		return
 	}
+	os.WriteFile(stampFile, []byte(stamp), 0o644)
 	log.Println("пусковой дистрибутив lolssd импортирован")
+}
+
+// fixShortcuts переводит ярлык рабочего стола Linux на lolssd-win desktop у систем, установленных
+// до него (там ярлык вёл прямо в wsl.exe). Ярлыки создаёт lolssd-setup.ps1; здесь только правка.
+func fixShortcuts() {
+	exe := filepath.Join(os.Getenv("ProgramFiles"), "lolssd", "lolssd-win.exe")
+	script := `$exe = '` + exe + `'
+$s = New-Object -ComObject WScript.Shell
+foreach ($d in "$env:PUBLIC\Desktop", "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Linux") {
+  $p = "$d\Linux desktop (host).lnk"
+  if (-not (Test-Path $p)) { continue }
+  $l = $s.CreateShortcut($p)
+  if ($l.TargetPath -eq $exe) { continue }
+  $l.TargetPath = $exe; $l.Arguments = 'desktop'
+  $l.Description = "The host's Hyprland, full screen on every monitor"
+  $l.Save(); "fixed $p"
+}`
+	out, err := hidden(time.Minute, "powershell.exe", "-NoProfile", "-NonInteractive", "-Command",
+		script).CombinedOutput()
+	if err != nil || len(out) > 0 {
+		log.Printf("ярлыки: %v %s", err, strings.TrimSpace(string(out)))
+	}
 }
 
 // lolssdVolume находит том раздела LOLSSD по метке ФС и возвращает его корень, например `D:\`.
