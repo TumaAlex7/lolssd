@@ -22,13 +22,13 @@ const (
 
 // output — какой вложенный выход Hyprland достался монитору хоста.
 type output struct {
-	Port, Desc, Name string // eDP-1, «Samsung Display Corp. 0x416E», WAYLAND-1
+	Port, Desc, Name string // eDP-1, «Samsung Display Corp. 0x416E», HEADLESS-1
 }
 
-// session запускает рабочий стол хоста: Hyprland вложенным в WSLg, по выходу на каждый
-// монитор Windows (docs/ARCHITECTURE.md §6, «Перевод правил, привязанных к мониторам»).
-// Конфиг пользователя не меняется: Hyprland получает обёртку, которая переводит имена
-// мониторов хоста в имена вложенных выходов.
+// session запускает рабочий стол хоста: Hyprland без экрана (headless) на виртуальном DRM-устройстве
+// vgem, с одним выходом на каждый монитор Windows; картинку каждого выхода отдаёт wayvnc, а Windows
+// показывает её полноэкранным TigerVNC (docs/ARCHITECTURE.md §6). Конфиг пользователя не меняется:
+// Hyprland получает обёртку, которая переводит имена мониторов хоста в имена выходов.
 func session() int {
 	if code := up(); code != 0 {
 		return code
@@ -84,7 +84,7 @@ func session() int {
 		fmt.Fprintln(os.Stderr, "конфиг Hyprland:", err)
 		return 1
 	}
-	return runIn(p, []string{"--bind-ro=" + sessionDir + ":" + inner + "/session"}, []string{"Hyprland", "--config", cfg})
+	return runHyprland(p, wins, n, cfg)
 }
 
 // writeKeymap собирает раскладку Hyprland: RMLVO пользователя (xkbcli из пускового дистрибутива)
@@ -108,7 +108,7 @@ func writeKeymap(kb hostprofile.Keyboard, plan keymap.Plan) error {
 }
 
 // mapOutputs сопоставляет мониторы хоста из профиля с мониторами Windows по EDID.
-// Номер выхода — позиция монитора в списке Windows: WAYLAND-1 — первый и т. д.
+// Номер выхода — позиция монитора в списке Windows: HEADLESS-1 — первый и т. д.
 func mapOutputs(host []hostprofile.Monitor, wins []hostprofile.WinMonitor) []output {
 	var res []output
 	used := make([]bool, len(wins))
@@ -116,7 +116,7 @@ func mapOutputs(host []hostprofile.Monitor, wins []hostprofile.WinMonitor) []out
 		for i, w := range wins {
 			if !used[i] && hostprofile.SameMonitor(h.EDID, w.EDID) {
 				used[i] = true
-				res = append(res, output{Port: h.Port, Desc: strings.TrimSpace(h.Desc), Name: fmt.Sprintf("WAYLAND-%d", i+1)})
+				res = append(res, output{Port: h.Port, Desc: strings.TrimSpace(h.Desc), Name: fmt.Sprintf("HEADLESS-%d", i+1)})
 				break
 			}
 		}
@@ -230,9 +230,9 @@ end
 
 hl = wrap(real, overrides)
 
--- Первый выход Hyprland создаёт сам, остальные — по одному окну на монитор Windows.
+-- Первый выход Hyprland создаёт сам, остальные — по одному на монитор Windows (размеры из AQ_HEADLESS_MODES).
 real.on("hyprland.start", function()
-  for _ = 2, outputs do real.exec_cmd("hyprctl output create wayland") end
+  for _ = 2, outputs do real.exec_cmd("hyprctl output create headless") end
 end)
 
 package.path = ` + luaStr(filepath.Dir(userConfig)+"/?.lua;") + ` .. package.path
@@ -375,7 +375,7 @@ func translateConfTo(main, home string, outs []output, n int, kbFile, dir string
 		}
 		if inside == inner+"/session/conf-0.conf" {
 			for range n - 1 {
-				lines = append(lines, "exec-once = hyprctl output create wayland")
+				lines = append(lines, "exec-once = hyprctl output create headless")
 			}
 			if kbFile != "" {
 				lines = append(lines, "input {", "    kb_file = "+kbFile, "}")

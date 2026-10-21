@@ -4,8 +4,8 @@
 #   build/wsl.sh            (обычно make wsl)
 #
 # Пусковой дистрибутив — Debian stable (DEBIAN=trixie): это «прибор» для systemd-nspawn,
-# cryptsetup, lvm2 и xkbcli, он не должен протухать, как rolling release. Основа — официальный
-# корневой архив Debian, из которого собираются их Docker-образы (debuerreotype). Пакеты ставит
+# cryptsetup, lvm2, xkbcli и wayvnc (рабочий стол, cmd/lolssd-wsl/desktop.go), он не должен
+# протухать, как rolling release. Основа — официальный корневой архив Debian, из которого собираются их Docker-образы (debuerreotype). Пакеты ставит
 # apt самого Debian внутри пространства имён пользователя: там мы root, а файлы получают
 # настоящих владельцев из диапазона subuid.
 #
@@ -68,12 +68,13 @@ cp -L /etc/resolv.conf "$r/etc/resolv.conf"
 chroot "$r" apt-get -q update >/dev/null
 chroot "$r" env DEBIAN_FRONTEND=noninteractive apt-get -qy install --no-install-recommends \
 	systemd systemd-sysv systemd-container dbus libpam-systemd \
-	cryptsetup lvm2 libxkbcommon-tools xkb-data ca-certificates >/dev/null
+	cryptsetup lvm2 libxkbcommon-tools xkb-data ca-certificates kmod wayvnc >/dev/null
 chroot "$r" apt-get clean
 rm -rf "$r"/var/lib/apt/lists/*
 
 install -m 0755 "$dist/wsl/lolssd-wsl" "$r/usr/local/bin/lolssd-wsl"
 install -m 0644 "$repo/build/wsl/wsl.conf" "$r/etc/wsl.conf"
+install -Dm 0644 "$repo/build/hypr/aquamarine-headless-device.patch" "$r/usr/local/share/lolssd/aquamarine-headless-device.patch"
 echo LANG=C.UTF-8 >"$r/etc/default/locale" # иначе pam_env ругается при каждом входе
 : >"$r/etc/resolv.conf" # WSL создаёт свой при запуске
 

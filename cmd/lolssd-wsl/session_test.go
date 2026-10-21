@@ -14,8 +14,8 @@ import (
 )
 
 var outs = []output{
-	{Port: "eDP-1", Desc: "Samsung Display Corp. 0x416E", Name: "WAYLAND-1"},
-	{Port: "DP-9", Desc: "LG Electronics LG HDR WFHD 0x00043804", Name: "WAYLAND-2"},
+	{Port: "eDP-1", Desc: "Samsung Display Corp. 0x416E", Name: "HEADLESS-1"},
+	{Port: "DP-9", Desc: "LG Electronics LG HDR WFHD 0x00043804", Name: "HEADLESS-2"},
 }
 
 func TestMapOutputs(t *testing.T) {
@@ -23,7 +23,7 @@ func TestMapOutputs(t *testing.T) {
 	host := []hostprofile.Monitor{{Port: "eDP-1", EDID: edid(1)}, {Port: "DP-8", EDID: edid(2)}, {Port: "DP-9", EDID: edid(3)}}
 	wins := []hostprofile.WinMonitor{{EDID: edid(3)[:128]}, {EDID: edid(1)}}
 	got := mapOutputs(host, wins)
-	if len(got) != 2 || got[0].Port != "eDP-1" || got[0].Name != "WAYLAND-2" || got[1].Port != "DP-9" || got[1].Name != "WAYLAND-1" {
+	if len(got) != 2 || got[0].Port != "eDP-1" || got[0].Name != "HEADLESS-2" || got[1].Port != "DP-9" || got[1].Name != "HEADLESS-1" {
 		t.Fatal(got)
 	}
 }
@@ -78,14 +78,14 @@ print(table.concat(log, "\n"))
 	if err != nil {
 		t.Fatal(err, string(out))
 	}
-	want := `dsp.focusmonitor(WAYLAND-2)
-dsp.exec_cmd(WAYLAND-1)
-monitor({output=WAYLAND-1,scale=1.5})
+	want := `dsp.focusmonitor(HEADLESS-2)
+dsp.exec_cmd(HEADLESS-1)
+monitor({output=HEADLESS-1,scale=1.5})
 monitor({output=HDMI-A-1})
-monitor({output=WAYLAND-2})
-workspace_rule({rule={monitor=WAYLAND-1},workspace=1})
-exec_cmd(hyprctl output create wayland)
-exec_cmd(hyprctl output create wayland)
+monitor({output=HEADLESS-2})
+workspace_rule({rule={monitor=HEADLESS-1},workspace=1})
+exec_cmd(hyprctl output create headless)
+exec_cmd(hyprctl output create headless)
 `
 	if string(out) != want {
 		t.Fatalf("получилось:\n%s", out)
@@ -115,15 +115,15 @@ func TestTranslateConf(t *testing.T) {
 	}
 	main, _ := os.ReadFile(filepath.Join(tmpSession, "conf-0.conf"))
 	ws, _ := os.ReadFile(filepath.Join(tmpSession, "conf-1.conf"))
-	want := "monitor = WAYLAND-1, preferred, 0x0, 1.5\n" +
+	want := "monitor = HEADLESS-1, preferred, 0x0, 1.5\n" +
 		"monitor = HDMI-A-1, preferred, auto, 1\n" +
-		"monitor = WAYLAND-2, preferred, 1920x0, 1\n" +
+		"monitor = HEADLESS-2, preferred, 1920x0, 1\n" +
 		"source = " + inner + "/session/conf-1.conf\n" +
-		"\nexec-once = hyprctl output create wayland"
+		"\nexec-once = hyprctl output create headless"
 	if string(main) != want {
 		t.Fatalf("главный конфиг:\n%s", main)
 	}
-	if !strings.Contains(string(ws), "monitor:WAYLAND-2") {
+	if !strings.Contains(string(ws), "monitor:HEADLESS-2") {
 		t.Fatalf("source-файл:\n%s", ws)
 	}
 }
