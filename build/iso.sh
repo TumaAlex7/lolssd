@@ -58,6 +58,8 @@ echo "4/6 файлы lolssd в образ"
 	echo "add '$dist/windows/C/Windows/Setup/Scripts' '/Windows/Setup/Scripts'"
 	echo "add '$dist/windows/lolssd.reg' '/Windows/Setup/Scripts/lolssd.reg'"
 	echo "add '$dist/windows/C/Program Files/lolssd' '/Program Files/lolssd'"
+	compgen -G "$dist/wsl/*.msi" >/dev/null ||
+		echo "  (нет MSI WSL в dist/wsl — WSL в образе не будет; make wsl докачает)" >&2
 	if [[ -f $dist/wsl/lolssd.tar ]]; then
 		echo "add '$dist/wsl' '/ProgramData/lolssd/wsl'"
 	else

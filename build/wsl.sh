@@ -29,8 +29,21 @@ echo "MSI WSL"
 url=$(curl -fsSL https://api.github.com/repos/microsoft/WSL/releases/latest |
 	grep -o '"browser_download_url": *"[^"]*x64\.msi"' | head -1 | sed 's/.*"\(https[^"]*\)"/\1/')
 [[ -n $url ]] || die "не нашёл MSI в последнем выпуске microsoft/WSL"
-curl -fsSL -o "$dist/wsl/wsl.x64.msi" "$url"
-echo "  $url"
+# Та же версия уже скачана — не качаем 370 МБ заново. Недокачанное продолжаем с места обрыва
+# (-C -). Медленнее 50 КБ/с минуту — обрываем, но сборку дистрибутива не прерываем: MSI нужен
+# только для make iso, а GitHub бывает очень медленным.
+msi=$dist/wsl/$(basename "$url")
+if [[ ! -s $msi ]]; then
+	if curl -fSL -C - --retry 3 --speed-limit 50000 --speed-time 60 -o "$msi.part" "$url"; then
+		mv "$msi.part" "$msi"
+	else
+		echo "  внимание: MSI не докачан ($(du -h "$msi.part" | cut -f1) из $url); make wsl докачает его в следующий раз" >&2
+	fi
+fi
+if [[ -s $msi ]]; then
+	find "$dist/wsl" -maxdepth 1 -name '*.msi' ! -name "$(basename "$msi")" -delete
+	echo "  $(basename "$msi")"
+fi
 
 echo "Debian $rel"
 # Каталог мог остаться от прошлой сборки с владельцами из subuid — удаляем его там же, где создали.
@@ -49,15 +62,19 @@ mount --rbind /dev "$r/dev"
 cp -L /etc/resolv.conf "$r/etc/resolv.conf"
 
 # systemd — PID 1 в WSL (wsl.conf), с ним nspawn получает делегированные cgroups.
+# dbus и libpam-systemd обязательны: с systemd WSL перед открытием терминала ждёт сеанс входа
+# от systemd-logind, а logind без системной шины D-Bus его не создаёт («Timed out waiting
+# for user session»), и терминал висит.
 chroot "$r" apt-get -q update >/dev/null
 chroot "$r" env DEBIAN_FRONTEND=noninteractive apt-get -qy install --no-install-recommends \
-	systemd systemd-sysv systemd-container cryptsetup lvm2 libxkbcommon-tools xkb-data \
-	ca-certificates >/dev/null
+	systemd systemd-sysv systemd-container dbus libpam-systemd \
+	cryptsetup lvm2 libxkbcommon-tools xkb-data ca-certificates >/dev/null
 chroot "$r" apt-get clean
 rm -rf "$r"/var/lib/apt/lists/*
 
 install -m 0755 "$dist/wsl/lolssd-wsl" "$r/usr/local/bin/lolssd-wsl"
 install -m 0644 "$repo/build/wsl/wsl.conf" "$r/etc/wsl.conf"
+echo LANG=C.UTF-8 >"$r/etc/default/locale" # иначе pam_env ругается при каждом входе
 : >"$r/etc/resolv.conf" # WSL создаёт свой при запуске
 
 umount -l "$r/dev" "$r/proc"
