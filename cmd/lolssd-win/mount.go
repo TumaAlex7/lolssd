@@ -223,6 +223,16 @@ func hidden(timeout time.Duration, name string, args ...string) *exec.Cmd {
 // Не выйдет до первой перезагрузки после включения компонентов WSL — тогда при следующем входе.
 // Нужен и без профиля хоста: в нём открывается ярлык «Linux terminal (SSD)».
 func ensureDistro() {
+	// Его вызывают и задание mount (с повышенными правами, при входе, на медленном диске — с
+	// задержкой), и ярлык рабочего стола. Второй ждёт первого, а потом видит, что всё уже
+	// обновлено. Мьютекс доступен обоим: в дескрипторе разрешён полный доступ вошедшим.
+	sd, _ := windows.SecurityDescriptorFromString("D:(A;;GA;;;AU)")
+	sa := &windows.SecurityAttributes{Length: uint32(unsafe.Sizeof(windows.SecurityAttributes{})), SecurityDescriptor: sd}
+	if m, err := windows.CreateMutex(sa, false, windows.StringToUTF16Ptr(`Local\lolssd-distro`)); err == nil || m != 0 {
+		windows.WaitForSingleObject(m, 15*60*1000)
+		defer windows.CloseHandle(m)
+		defer windows.ReleaseMutex(m)
+	}
 	dir := filepath.Join(os.Getenv("ProgramData"), "lolssd", "wsl")
 	tar := filepath.Join(dir, "lolssd.tar")
 	st, err := os.Stat(tar)
