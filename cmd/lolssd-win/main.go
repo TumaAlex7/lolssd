@@ -19,7 +19,9 @@ func main() {
 	dir := filepath.Join(os.Getenv("ProgramData"), "lolssd")
 	os.MkdirAll(dir, 0o755)
 	if f, err := os.OpenFile(filepath.Join(dir, "lolssd-win.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
-		log.SetOutput(io.MultiWriter(os.Stderr, f))
+		// Файл первым: у windowsgui-сборки нет stderr, запись туда падает, а MultiWriter
+		// на первой ошибке останавливается — со stderr первым файл оставался пустым.
+		log.SetOutput(io.MultiWriter(f, os.Stderr))
 	}
 	log.SetPrefix(os.Args[1] + ": ")
 

@@ -4,6 +4,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -12,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -141,7 +143,7 @@ func mountHost() int {
 	failed := 0
 	for n := range disks {
 		dev := fmt.Sprintf(`\\.\PHYSICALDRIVE%d`, n)
-		cmd := hidden("wsl.exe", "--mount", dev, "--bare")
+		cmd := hidden(2*time.Minute, "wsl.exe", "--mount", dev, "--bare")
 		out, err := cmd.CombinedOutput()
 		msg := strings.TrimSpace(string(out))
 		// Повторный запуск (диск уже подключён) — не ошибка.
@@ -200,8 +202,13 @@ func applyScancodeMap(p hostprofile.Profile) bool {
 
 // hidden запускает консольную программу без окна: lolssd-win собран без консоли (windowsgui),
 // и иначе каждый wsl.exe открывал бы своё окно при входе в Windows.
-func hidden(name string, args ...string) *exec.Cmd {
-	cmd := exec.Command(name, args...)
+// Без окна программа не может ничего спросить у пользователя, поэтому каждый вызов ограничен
+// по времени: зависший wsl.exe (например, до перезагрузки после установки WSL) не держит
+// задание при входе вечно.
+func hidden(timeout time.Duration, name string, args ...string) *exec.Cmd {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	time.AfterFunc(timeout+time.Second, cancel)
+	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Env = append(os.Environ(), "WSL_UTF8=1") // иначе wsl.exe пишет в UTF-16
 	const createNoWindow = 0x08000000
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: createNoWindow}
@@ -218,19 +225,19 @@ func ensureDistro() {
 	if _, err := os.Stat(tar); err != nil {
 		return
 	}
-	wsl := func(args ...string) (string, error) {
-		cmd := hidden("wsl.exe", args...)
+	wsl := func(timeout time.Duration, args ...string) (string, error) {
+		cmd := hidden(timeout, "wsl.exe", args...)
 		out, err := cmd.CombinedOutput()
 		return strings.TrimSpace(string(out)), err
 	}
-	if list, err := wsl("--list", "--quiet"); err == nil {
+	if list, err := wsl(time.Minute, "--list", "--quiet"); err == nil {
 		for _, name := range strings.Fields(list) {
 			if strings.EqualFold(name, "lolssd") {
 				return
 			}
 		}
 	}
-	if out, err := wsl("--import", "lolssd", filepath.Join(dir, "distro"), tar); err != nil {
+	if out, err := wsl(10*time.Minute, "--import", "lolssd", filepath.Join(dir, "distro"), tar); err != nil {
 		log.Printf("wsl --import lolssd: %v: %s", err, out)
 		return
 	}
