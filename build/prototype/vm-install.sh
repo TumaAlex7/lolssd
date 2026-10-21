@@ -88,6 +88,9 @@ sudo -u "$SUDO_USER" swtpm socket --tpm2 --tpmstate dir="$work/tpm" \
 
 echo "Запускаю QEMU. В установщике: язык, «У меня нет ключа», диск — единственное незанятое место."
 echo "Дальше всё само: после первого входа Windows готова, выключите её (Пуск → Завершение работы)."
+# Диск первым в порядке загрузки, ISO вторым: в ISO нет «Press any key to boot from CD»
+# (efisys_noprompt), и с ISO первым каждая перезагрузка установщика начинала бы установку
+# заново. При первом запуске ESP на диске пуст, и прошивка сама переходит к ISO.
 # Диск по AHCI, сеть e1000e: драйверы для обоих есть в Windows из коробки. Учётку Microsoft OOBE
 # не попросит: локальная учётная запись задана в файле ответов.
 sudo -u "$SUDO_USER" --preserve-env=WAYLAND_DISPLAY,DISPLAY,XDG_RUNTIME_DIR \
@@ -97,8 +100,8 @@ sudo -u "$SUDO_USER" --preserve-env=WAYLAND_DISPLAY,DISPLAY,XDG_RUNTIME_DIR \
 	-drive if=pflash,format=raw,readonly=on,file="$code" \
 	-drive if=pflash,format=raw,file="$work/OVMF_VARS.fd" \
 	-device ahci,id=ahci \
-	-drive if=none,id=ssd,format=raw,cache=none,file="$dev" -device ide-hd,drive=ssd,bus=ahci.0,bootindex=1 \
-	-drive if=none,id=cd,media=cdrom,file="$iso" -device ide-cd,drive=cd,bus=ahci.1,bootindex=0 \
+	-drive if=none,id=ssd,format=raw,cache=none,file="$dev" -device ide-hd,drive=ssd,bus=ahci.0,bootindex=0 \
+	-drive if=none,id=cd,media=cdrom,file="$iso" -device ide-cd,drive=cd,bus=ahci.1,bootindex=1 \
 	-device qemu-xhci -device usb-tablet -nic user,model=e1000e
 
 echo "QEMU закрыт. Если Windows выключилась после первого входа — можно грузиться с SSD:"
