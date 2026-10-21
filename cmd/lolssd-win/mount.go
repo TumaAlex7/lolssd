@@ -254,6 +254,7 @@ func ensureDistro() {
 	}
 	if out, err := wsl(10*time.Minute, "--import", "lolssd", filepath.Join(dir, "distro"), tar); err != nil {
 		if strings.Contains(out, "ALREADY_EXISTS") {
+			log.Println("пусковой дистрибутив уже есть, но в wsl --list его не было")
 			return
 		}
 		log.Printf("wsl --import lolssd: %v: %s", err, out)
