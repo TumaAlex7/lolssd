@@ -301,6 +301,10 @@ end
 
 -- Раскладка с F13/F14 → Super_L/Super_R (Windows отдаёт Meta так) и клавишами сочетаний.
 if kbFile then real.config({ input = { kb_file = kbFile } }) end
+
+-- Журнал ещё и в stdout: lolssd-win пишет его в session.log, а файл журнала Hyprland при
+-- аварийном завершении не успевает записаться.
+real.config({ debug = { enable_stdout_logs = true } })
 `
 }
 

@@ -104,6 +104,10 @@ func runHyprland(p hostprofile.Profile, wins []hostprofile.WinMonitor, n int, cf
 			"AQ_HEADLESS_MODES=" + strings.Join(modes, ","),
 			"LD_LIBRARY_PATH=" + aqLibIn + ":" + inner + "/lib/lib",
 			"Hyprland", "--config", cfg}
+		// Построчно: иначе вывод в канал буферизуется и при падении теряется.
+		if _, err := os.Stat(filepath.Join(rootDir, "usr/bin/stdbuf")); err == nil {
+			cmd = append(cmd[:len(cmd)-3], "stdbuf", "-oL", "-eL", "Hyprland", "--config", cfg)
+		}
 
 		stop := make(chan struct{})
 		done := make(chan struct{})
@@ -117,7 +121,7 @@ func runHyprland(p hostprofile.Profile, wins []hostprofile.WinMonitor, n int, cf
 		code = runIn(p, extra, cmd)
 		close(stop)
 		<-done
-		saveHyprLog(strings.TrimPrefix(driver, "GALLIUM_DRIVER="))
+		saveHyprLog(p, strings.TrimPrefix(driver, "GALLIUM_DRIVER="), began)
 		if code == 0 || time.Since(began) > 20*time.Second {
 			break
 		}
@@ -130,15 +134,26 @@ func runHyprland(p hostprofile.Profile, wins []hostprofile.WinMonitor, n int, cf
 	return code
 }
 
-// saveHyprLog копирует журнал Hyprland (он в XDG_RUNTIME_DIR сеанса, в памяти) в
-// C:\ProgramData\lolssd\hyprland-<драйвер>.log, рядом с session.log: его можно прочитать и после.
-func saveHyprLog(driver string) {
-	logs, _ := filepath.Glob(filepath.Join(xdgDir, "hypr", "*", "hyprland.log"))
-	if len(logs) == 0 {
-		return
+// saveHyprLog сохраняет журнал Hyprland (он в XDG_RUNTIME_DIR сеанса, в памяти) и его краш-репорт
+// в C:\ProgramData\lolssd\ как hyprland-<драйвер>.log и crash-<драйвер>.txt. Краш-репорт Hyprland
+// пишет в ~/.cache/hyprland хоста под номером процесса — в контейнере он всегда один и тот же,
+// и следующий отчёт перезаписывал предыдущий не целиком. Отчёт, созданный сеансом, с хоста убирается.
+func saveHyprLog(p hostprofile.Profile, driver string, since time.Time) {
+	const out = "/mnt/c/ProgramData/lolssd/"
+	if logs, _ := filepath.Glob(filepath.Join(xdgDir, "hypr", "*", "hyprland.log")); len(logs) > 0 {
+		if b, err := os.ReadFile(logs[len(logs)-1]); err == nil {
+			os.WriteFile(out+"hyprland-"+driver+".log", b, 0o644)
+		}
 	}
-	if b, err := os.ReadFile(logs[len(logs)-1]); err == nil {
-		os.WriteFile("/mnt/c/ProgramData/lolssd/hyprland-"+driver+".log", b, 0o644)
+	reports, _ := filepath.Glob(filepath.Join(rootDir, p.User.Home, ".cache/hyprland/hyprlandCrashReport*.txt"))
+	for _, r := range reports {
+		st, err := os.Stat(r)
+		if err != nil || st.ModTime().Before(since) {
+			continue
+		}
+		if b, err := os.ReadFile(r); err == nil && os.WriteFile(out+"crash-"+driver+".txt", b, 0o644) == nil {
+			os.Remove(r)
+		}
 	}
 }
 

@@ -65,7 +65,7 @@ local function rec(name)
   end
 end
 local handlers = {}
-hl = { monitor = rec("monitor"), workspace_rule = rec("workspace_rule"), exec_cmd = rec("exec_cmd"),
+hl = { monitor = rec("monitor"), workspace_rule = rec("workspace_rule"), exec_cmd = rec("exec_cmd"), config = function() end,
   dsp = { focusmonitor = rec("dsp.focusmonitor"),
     exec_cmd = setmetatable({}, { __call = function(_, ...) rec("dsp.exec_cmd")(...) end }) },
   on = function(_, f) handlers[#handlers + 1] = f end }
@@ -162,7 +162,7 @@ hl = {
   is_key_down = function(k) return down[k] == true end,
   bind = function(keys, action) binds[norm(keys)] = action end,
   dsp = { exec_cmd = function(c) return { cmd = c } end },
-  config = function(c) print("kb_file " .. c.input.kb_file) end,
+  config = function(c) if c.input then print("kb_file " .. c.input.kb_file) end end,
   on = function() end, exec_cmd = function() end,
 }
 dofile(`+luaStr(wrapper)+`)
