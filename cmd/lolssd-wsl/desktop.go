@@ -105,12 +105,19 @@ func runHyprland(p hostprofile.Profile, wins []hostprofile.WinMonitor, n int, cf
 			"XDG_RUNTIME_DIR=" + userRun,
 			"AQ_HEADLESS_DRM_DEVICE=" + card,
 			"AQ_HEADLESS_MODES=" + strings.Join(modes, ","),
-			"LD_LIBRARY_PATH=" + aqLibIn + ":" + inner + "/lib/lib",
-			"Hyprland", "--config", cfg}
+			"LD_LIBRARY_PATH=" + aqLibIn + ":" + inner + "/lib/lib"}
+		env := cmd
+		// Своя сессионная шина D-Bus на весь сеанс, как при обычном входе: без неё waybar, трей,
+		// уведомления и прочее падают или работают с ошибками («Cannot autolaunch D-Bus»).
+		if _, err := os.Stat(filepath.Join(rootDir, "usr/bin/dbus-run-session")); err == nil {
+			cmd = append(cmd, "dbus-run-session", "--")
+		}
 		// Построчно: иначе вывод в канал буферизуется и при падении теряется.
 		if _, err := os.Stat(filepath.Join(rootDir, "usr/bin/stdbuf")); err == nil {
-			cmd = append(cmd[:len(cmd)-3], "stdbuf", "-oL", "-eL", "Hyprland", "--config", cfg)
+			cmd = append(cmd, "stdbuf", "-oL", "-eL")
 		}
+		cmd = append(cmd, "Hyprland", "--config", cfg)
+		name := strings.TrimPrefix(driver, "GALLIUM_DRIVER=")
 
 		stop := make(chan struct{})
 		done := make(chan struct{})
@@ -118,17 +125,29 @@ func runHyprland(p hostprofile.Profile, wins []hostprofile.WinMonitor, n int, cf
 			defer close(done)
 			serveVNC(n, stop)
 		}()
+		// Журнал Hyprland копируется на ходу: при выходе Hyprland удаляет его вместе с каталогом.
+		go func() {
+			for {
+				select {
+				case <-stop:
+					return
+				case <-time.After(2 * time.Second):
+					copyHyprLog(name)
+				}
+			}
+		}()
 		fmt.Printf("Hyprland (%s): %s на %s, выходов %d, VNC на 127.0.0.1:%d…%d\n",
 			driver, strings.Join(modes, ","), card, n, vncPort0+1, vncPort0+n)
 		began := time.Now()
 		code = runIn(p, extra, cmd)
 		close(stop)
 		<-done
-		saveHyprLog(p, strings.TrimPrefix(driver, "GALLIUM_DRIVER="), began)
+		copyHyprLog(name)
+		saveCrashReport(p, name, began)
 		if code == 0 || time.Since(began) > 20*time.Second {
 			break
 		}
-		gbmProbe(p, extra, cmd[:len(cmd)-3], card) // окружение то же, без «Hyprland --config cfg»
+		gbmProbe(p, extra, env, card)
 		if i == len(drivers)-1 {
 			break
 		}
@@ -137,24 +156,31 @@ func runHyprland(p hostprofile.Profile, wins []hostprofile.WinMonitor, n int, cf
 	return code
 }
 
-// saveHyprLog сохраняет журнал Hyprland (он в XDG_RUNTIME_DIR сеанса, в памяти) и его краш-репорт
-// в C:\ProgramData\lolssd\ как hyprland-<драйвер>.log и crash-<драйвер>.txt. Краш-репорт Hyprland
-// пишет в ~/.cache/hyprland хоста под номером процесса — в контейнере он всегда один и тот же,
-// и следующий отчёт перезаписывал предыдущий не целиком. Отчёт, созданный сеансом, с хоста убирается.
-func saveHyprLog(p hostprofile.Profile, driver string, since time.Time) {
-	const out = "/mnt/c/ProgramData/lolssd/"
-	if logs, _ := filepath.Glob(filepath.Join(xdgDir, "hypr", "*", "hyprland.log")); len(logs) > 0 {
-		if b, err := os.ReadFile(logs[len(logs)-1]); err == nil {
-			os.WriteFile(out+"hyprland-"+driver+".log", b, 0o644)
-		}
+const logDir = "/mnt/c/ProgramData/lolssd/" // рядом с session.log, читается и из Linux
+
+// copyHyprLog копирует журнал Hyprland (он в XDG_RUNTIME_DIR сеанса, в памяти) в
+// hyprland-<драйвер>.log. Пустой не копируется: последняя удачная копия ценнее.
+func copyHyprLog(driver string) {
+	logs, _ := filepath.Glob(filepath.Join(xdgDir, "hypr", "*", "hyprland.log"))
+	if len(logs) == 0 {
+		return
 	}
+	if b, err := os.ReadFile(logs[len(logs)-1]); err == nil && len(b) > 0 {
+		os.WriteFile(logDir+"hyprland-"+driver+".log", b, 0o644)
+	}
+}
+
+// saveCrashReport переносит краш-репорт попытки в crash-<драйвер>.txt. Hyprland пишет его в
+// ~/.cache/hyprland хоста под номером процесса — в контейнере он всегда один и тот же, и
+// следующий отчёт перезаписывал предыдущий не целиком. Отчёт сеанса с хоста убирается.
+func saveCrashReport(p hostprofile.Profile, driver string, since time.Time) {
 	reports, _ := filepath.Glob(filepath.Join(rootDir, p.User.Home, ".cache/hyprland/hyprlandCrashReport*.txt"))
 	for _, r := range reports {
 		st, err := os.Stat(r)
 		if err != nil || st.ModTime().Before(since) {
 			continue
 		}
-		if b, err := os.ReadFile(r); err == nil && os.WriteFile(out+"crash-"+driver+".txt", b, 0o644) == nil {
+		if b, err := os.ReadFile(r); err == nil && os.WriteFile(logDir+"crash-"+driver+".txt", b, 0o644) == nil {
 			os.Remove(r)
 		}
 	}
@@ -297,10 +323,22 @@ func serveVNC(n int, stop chan struct{}) {
 				"--socket="+filepath.Join(xdgDir, "wayvncctl-"+strconv.Itoa(i+1)),
 				"127.0.0.1", strconv.Itoa(vncPort0+i+1))
 			c.Env = append(os.Environ(), "XDG_RUNTIME_DIR="+xdgDir, "WAYLAND_DISPLAY="+socket)
+			f, _ := os.OpenFile(fmt.Sprintf("%swayvnc-%d.log", logDir, i+1), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+			if f != nil {
+				c.Stdout, c.Stderr = f, f
+			}
 			if err := c.Start(); err == nil {
 				procs[i] = c
 				alive[i].Store(true)
-				go func() { c.Wait(); alive[i].Store(false) }()
+				go func() {
+					c.Wait()
+					alive[i].Store(false)
+					if f != nil {
+						f.Close()
+					}
+				}()
+			} else if f != nil {
+				f.Close()
 			}
 		}
 		select {

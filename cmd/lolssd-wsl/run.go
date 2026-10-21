@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"lolssd/hostprofile"
@@ -79,6 +80,9 @@ func shell() int {
 func runIn(p hostprofile.Profile, extra, args []string) int {
 	nspawn := []string{
 		"--quiet", "--as-pid2", "--register=no",
+		// Своё имя на каждый запуск: иначе оно берётся из каталога (root), и второй запуск
+		// (оболочка при работающем рабочем столе) отказывается: «unix-export/root exists».
+		"--machine=lolssd-" + strconv.Itoa(os.Getpid()),
 		"--link-journal=no", "--timezone=off", "--resolv-conf=bind-host",
 		"-D", rootDir, "--user=" + p.User.Name, "--chdir=" + p.User.Home,
 		"--bind=/mnt/wslg:" + inner + "/wslg",

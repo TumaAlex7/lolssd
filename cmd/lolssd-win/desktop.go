@@ -82,7 +82,8 @@ func desktop() int {
 
 	// Вывод сеанса — и в консоль, и в session.log рядом с журналом (читается и из Linux).
 	// При ошибке консоль ждёт Enter.
-	script := `{ /usr/local/bin/lolssd-wsl session; echo $? >/run/lolssd-rc; } 2>&1 | tee /mnt/c/ProgramData/lolssd/session.log
+	script := `cd /mnt/c/ProgramData/lolssd && for f in session.log hyprland-*.log crash-*.txt wayvnc-*.log; do [ -f "$f" ] && mv -f "$f" "prev-$f"; done
+{ /usr/local/bin/lolssd-wsl session; echo $? >/run/lolssd-rc; } 2>&1 | tee /mnt/c/ProgramData/lolssd/session.log
 rc=$(cat /run/lolssd-rc); [ "$rc" = 0 ] || { echo; echo "Ошибка (код $rc), вывод в C:\\ProgramData\\lolssd\\session.log. Enter — закрыть"; read x; }`
 	os.Setenv("LOLSSD_MONITORS", string(monsJSON))
 	os.Setenv("WSLENV", os.Getenv("WSLENV")+":LOLSSD_MONITORS")
