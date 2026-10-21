@@ -1,0 +1,10 @@
+^Microsoft\.VCLibs
+^Microsoft\.UI\.Xaml
+^Microsoft\.NET\.
+^Microsoft\.WindowsAppRuntime
+^Microsoft\.DesktopAppInstaller
+^Microsoft\.WindowsTerminal
+^Microsoft\.SecHealthUI
+^Microsoft\.WindowsStore
+^Microsoft\.StorePurchaseApp
+^Microsoft\.WindowsNotepad
