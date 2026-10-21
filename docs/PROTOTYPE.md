@@ -4,44 +4,43 @@
 под Vanguard с внешнего SSD.** Всё, что помечено в ARCHITECTURE.md как «[проверить]», собрано
 здесь в порядке, в котором до этого доходят руки. Результаты — в таблицу в конце.
 
+**Итог первого прогона (стоковая Windows, наши настройки не применились):** Vanguard не
+ругается, тренировка запускается. Остальное переделано: всё теперь собирается в один ISO.
+
 Windows ставится на SSD из Linux через QEMU: SSD подключается к виртуалке как обычный диск,
-и установщик Windows не знает, что это USB. На настоящем железе Windows потом грузится с USB
-благодаря `PortableOperatingSystem` из `lolssd.reg` (режим Windows To Go).
+и установщик Windows не знает, что это USB. Установщик — ISO, собранный `make iso`: в нём одна
+редакция, почищенный образ, наши файлы, драйверы, WSL и файл ответов.
 
 > **Важно про перезагрузки.** Порядок загрузки ноутбука не меняется: **любая перезагрузка
-> Windows приводит в Linux.** После установки Vanguard, WSL и т. п. снова
+> Windows приводит в Linux.** После установки Vanguard и т. п. снова
 > `sudo sh .../lolssd.sh boot` (или меню загрузки прошивки, у ASUS — Esc/F8 при включении).
 
-Пути ниже: `/run/media/$USER/LOLSSD` — раздел LOLSSD в Linux (смонтирует udisks), `D:` — он же
-в Windows (буква может отличаться).
+Пути ниже: `/run/media/$USER/LOLSSD` — раздел LOLSSD в Linux (смонтирует udisks).
 
 ---
 
-## 0. Подготовка (пока SSD в пути)
+## 0. Подготовка
 
 1. Пакеты:
    ```
-   sudo pacman -S --needed qemu-desktop edk2-ovmf dosfstools acl swtpm ntfs-3g
+   sudo pacman -S --needed qemu-desktop edk2-ovmf dosfstools acl swtpm ntfs-3g p7zip wimlib libisoburn hivex
    ```
-2. ISO Windows 11 с https://www.microsoft.com/software-download/windows11 («Download Windows 11
-   Disk Image (ISO)», язык любой).
-3. Сборка:
+2. ISO Windows 11 с https://www.microsoft.com/software-download/windows11 (язык любой).
+3. **Драйверы** — INF-пакеты (папки с `.inf`, `.sys`, `.cat`), не установщики, в одной папке,
+   например `~/lolssd-drivers`. Фирменные `.exe` обычно распаковываются: `7z x файл.exe`.
+   Попадут в образ в `C:\Drivers`; при первой загрузке на компьютере их поставит задание
+   `\lolssd\drivers`. У автора: Wi-Fi MediaTek MT7922 и AMD 680M со страницы ASUS M5506NA.
+4. Сборка (`make wsl` — пусковой WSL-дистрибутив и MSI WSL; нужен docker):
    ```
-   cd ~/repos/lolssd && make dist
+   cd ~/repos/lolssd
+   sudo systemctl start docker && sudo make wsl
+   make iso ISO=~/Downloads/Windows11_*.iso DRIVERS=~/lolssd-drivers
    ```
-   По желанию `sudo systemctl start docker && sudo make wsl` — для раздела 5.
-4. **Драйверы для Windows на ноутбуке** — не установщики, а **INF-пакеты** (папки с `.inf`,
-   `.sys`, `.cat`): так же они попадут в итоговый образ. Windows Update в образе выключен, а без
-   драйвера Wi-Fi не будет сети. Нужны Wi-Fi MediaTek MT7922 и графика AMD (Radeon 680M):
-   - со страницы поддержки ASUS для Vivobook S 15 M5506NA драйверы обычно приходят zip-архивом
-     с INF внутри — распаковать;
-   - установщик AMD (`.exe`) — самораспаковывающийся архив: `7z x amd-software-*.exe -oamd`,
-     INF лежат в `amd/Packages/Drivers/Display/…`;
-   - разложить по папкам в `drivers/` на разделе LOLSSD (можно и после установки, пока
-     виртуалка выключена: `udisksctl mount -b /dev/sdX2`). Пока QEMU работает, разделы этого
-     диска в Linux не монтировать;
-   - запасной путь к сети без драйверов — **USB-модем с телефона**: драйвер RNDIS в Windows есть.
-5. **Снимок хоста до первой загрузки с SSD** — потом сравним, не тронула ли Windows ноутбук:
+   Редакция — `EDITION="Windows 11 Pro"`, по умолчанию Home. Берите ту, что была на ноутбуке:
+   ключа в прошивке (таблица `/sys/firmware/acpi/tables/MSDM`) у автора нет, лицензия цифровая,
+   привязана к железу, и Windows той же редакции активируется сама при выходе в интернет.
+5. **Снимок хоста до первой загрузки с SSD** — потом сравним, не тронула ли Windows ноутбук
+   (у автора уже есть в `~/lolssd-proto`):
    ```
    mkdir -p ~/lolssd-proto && cd ~/lolssd-proto
    sudo efibootmgr -v > nvram-before.txt
@@ -56,30 +55,17 @@ Windows ставится на SSD из Linux через QEMU: SSD подключ
 1. Подключить SSD, найти его: `lsblk -o NAME,SIZE,MODEL,TRAN` (у него `TRAN=usb`).
 2. Запустить (сотрёт диск, спросит подтверждение; откажется работать с не-USB диском):
    ```
-   sudo build/prototype/vm-install.sh /dev/sdX ~/Downloads/Win11_*.iso 128G
+   sudo build/prototype/vm-install.sh /dev/sdX dist/iso/lolssd-*.iso 128G
    ```
-   Последний аргумент — сколько отдать под Windows; остаток диска станет разделом `DATA` (NTFS)
-   для своих файлов. Без него Windows получит весь диск.
-3. В окне QEMU:
-   - сразу нажать любую клавишу — загрузка с ISO;
-   - язык → «Установить» → **«У меня нет ключа продукта»** → редакция **как у заводской Windows
-     ноутбука** (обычно Home). Ключ заводской Windows зашит в прошивку (таблица ACPI MSDM), и на
-     настоящем железе Windows той же редакции активируется сама; другая останется без активации
-     (работает, но с водяным знаком). Если таблицы `/sys/firmware/acpi/tables/MSDM` нет (как на
-     ноутбуке автора), лицензия цифровая: она привязана к железу на серверах Microsoft, и Windows
-     той же редакции активируется на этом ноутбуке при первом выходе в интернет, учётка Microsoft
-     для этого не нужна;
-   - «Выборочная установка» → выбрать **«Незанятое место на диске 0»** (единственное: между
-     LOLSSD и DATA) → Далее;
-   - после перезагрузок OOBE почти не задаёт вопросов (может спросить регион и раскладку).
-4. При первом входе откроется окно `apply.cmd`: ставит файлы lolssd, проверяет запасной путь
-   загрузчика, применяет `lolssd.reg` и скрипт настройки, показывает журнал.
-   - **Ожидаемо:** ошибка `reg import` на последнем ключе (`WaaSMedicSvc`, защищён ACL),
-     возможно `FAIL disable update scheduled tasks` с частью заданий.
-   - Должно быть: `Fallback boot path: OK`.
-   - Если окно не открылось: открыть `D:\windows\apply.cmd` → «Запуск от имени администратора».
-   - Сфотографировать/переписать журнал → таблица, строки 1–3.
-5. Пуск → Завершение работы. QEMU закроется.
+   Последний аргумент — сколько отдать под Windows; остаток диска станет разделом `DATA` (NTFS).
+3. В окне QEMU: язык → «Установить» → **«У меня нет ключа продукта»** (если спросит) →
+   «Выборочная установка» → **единственное незанятое место** → Далее. Дальше без вопросов:
+   - до OOBE применяется `lolssd.reg`, локальная учётка `lol` создаётся сама, без Microsoft;
+   - до первого входа `SetupComplete.cmd` удаляет приложения магазина (через DISM), ставит WSL,
+     регистрирует задания, создаёт ярлыки Linux; журнал `C:\Windows\Setup\Scripts\lolssd-setup.log`;
+   - при первом входе открывается окно `lolssd-riot.ps1` и запускает установщик Riot: Riot
+     Client с игрой (~25 ГБ) качается в виртуалке. Дождаться, пока Riot Client предложит играть.
+4. Пуск → Завершение работы. QEMU закроется → таблица, строки 1–3, 9.
 
 ---
 
@@ -108,12 +94,10 @@ Windows ставится на SSD из Linux через QEMU: SSD подключ
 ## 3. В Windows на ноутбуке
 
 1. **Сеть и драйверы.** Задание `\lolssd\drivers` при старте само ставит драйверы из папок
-   `drivers` на разделах диска (LOLSSD, DATA), если компьютер новый или у устройства нет драйвера.
-   Если образ ставился до появления этого задания — один раз запустить `D:\windows\apply.cmd`
-   от имени администратора (повторный запуск безопасен; он заодно поставит драйверы сразу).
-   Журнал: `C:\ProgramData\lolssd\lolssd-drivers.log`. Вручную то же самое:
-   `pnputil /add-driver D:\drivers\*.inf /subdirs /install`. Запасной путь к сети — USB-модем с
-   телефона → таблица 7.
+   `drivers` на всех разделах (`C:\Drivers` из образа, а также LOLSSD и DATA), если компьютер
+   новый или у устройства нет драйвера. Журнал: `C:\ProgramData\lolssd\lolssd-drivers.log`.
+   Вручную: `pnputil /add-driver C:\Drivers\*.inf /subdirs /install`. Запасной путь к сети —
+   USB-модем с телефона → таблица 7.
 2. **Безопасность** (PowerShell от администратора):
    ```
    Confirm-SecureBootUEFI
@@ -123,24 +107,20 @@ Windows ставится на SSD из Linux через QEMU: SSD подключ
    ```
    `VirtualizationBasedSecurityStatus = 2` — VBS работает; `2` в `SecurityServicesRunning` — HVCI.
    → таблица 8.
-3. **Лолка.** Скачать установщик с leagueoflegends.com и запустить из `cmd`, проверяя ключ:
-   ```
-   "%USERPROFILE%\Downloads\Install League of Legends ru.exe" --skip-to-install
-   ```
-   Поставил без вопросов? → таблица 9. Vanguard попросит перезагрузку → **Linux** → снова
-   `lolssd.sh boot`.
+3. **Лолка** уже стоит (предустановлена в виртуалке). Если нет — запустить
+   `C:\Program Files\lolssd\lolssd-riot.ps1`, журнал `C:\ProgramData\lolssd\lolssd-riot.log`
+   → таблица 9. Vanguard может попросить перезагрузку → **Linux** → снова `lolssd.sh boot`.
 4. **Главное:** войти, запустить тренировку/бота. Точный текст и код ошибок `VAN …`, если есть
    → таблица 10.
    - Если Vanguard требует Secure Boot: включить его в BIOS, проверить ещё раз, **выключить
      обратно** (неподписанный Linux с ним не загрузится) → таблица 11.
 5. FPS (Ctrl+F в игре), ощущение мыши/тачпада → таблица 12.
-6. **Наши инструменты:** сохранить на SSD журналы и состояние NVRAM глазами Windows:
+6. **Наши инструменты:** состояние NVRAM и заданий глазами Windows — в журналы (журналы
+   `C:\ProgramData\lolssd\*.log` и `C:\Windows\Setup\Scripts\lolssd-setup.log` потом можно
+   прочитать из Linux, смонтировав раздел Windows только для чтения):
    ```
-   mkdir D:\results
-   copy C:\ProgramData\lolssd\lolssd-win.log D:\results\
-   copy C:\Windows\Setup\Scripts\lolssd-setup.log D:\results\
-   bcdedit /enum firmware > D:\results\bcdedit-firmware.txt
-   schtasks /query /tn \lolssd\ /fo list > D:\results\tasks.txt
+   bcdedit /enum firmware > C:\ProgramData\lolssd\bcdedit-firmware.txt
+   schtasks /query /tn \lolssd\ /fo list > C:\ProgramData\lolssd\tasks.txt
    ```
    Что `nvram-guard` написал при старте → таблица 13.
 7. Пуск → Завершение работы (не гибернация).
@@ -163,28 +143,24 @@ journalctl -b -1 -p err --no-pager | grep -iE 'ext4|nvme|i/o error'
 
 ## 5. Linux внутри Windows (если осталось время)
 
-Нужен `make wsl` из подготовки. Каждая перезагрузка Windows — через Linux и `lolssd.sh boot`.
+WSL и пусковой дистрибутив уже в образе; дистрибутив импортируется при первом входе после
+перезагрузки на железе. Каждая перезагрузка Windows — через Linux и `lolssd.sh boot`.
 
-1. В Linux: `sh /run/media/$USER/LOLSSD/lolssd.sh profile` — профиль ляжет на SSD; заодно
-   покажет, какие переназначения keyd не переносятся. Скопировать `dist/wsl/lolssd.tar` на SSD:
-   `cp ~/repos/lolssd/dist/wsl/lolssd.tar /run/media/$USER/LOLSSD/`.
-2. В Windows (нужен интернет): `wsl --install --no-distribution` → перезагрузка (через Linux).
-3. Импорт пускового дистрибутива и монтирование:
-   ```
-   wsl --import lolssd C:\ProgramData\lolssd\wsl D:\lolssd.tar
-   "C:\Program Files\lolssd\lolssd-win.exe" mount
-   type C:\ProgramData\lolssd\lolssd-win.log
-   ```
-   (`mount` — из командной строки администратора.) Попросит перезагрузку из-за `Scancode Map`
-   → перезагрузиться (через Linux).
+1. **Терминал в Arch на диске** — ярлык «Linux terminal (SSD)» (Пуск → Linux или рабочий стол).
+   Работает без хоста → таблица 15.
+2. В Linux: `sh /run/media/$USER/LOLSSD/lolssd.sh profile` — профиль ляжет на SSD; заодно
+   покажет, какие переназначения keyd не переносятся.
+3. Загрузиться в Windows: при входе `lolssd-win mount` найдёт профиль, подключит диск хоста и,
+   если поменялся `Scancode Map`, попросит перезагрузку (через Linux).
 4. **Ядро WSL:**
    ```
    wsl -d lolssd -- sh -c "cat /proc/filesystems | grep -E 'btrfs|ext4'; ls -l /dev/dxg /dev/dri; ls /dev/mapper"
    ```
    → таблица 15.
-5. **Режим «Приложения»:** `wsl -d lolssd -u root -- lolssd-wsl run -- kitty` (ваш терминал).
+5. **Оболочка хоста** — ярлык «Linux shell (host)». **Режим «Приложения»:**
+   `wsl -d lolssd -u root -- lolssd-wsl run -- kitty` (ваш терминал).
    Открылось окно, ваши конфиги на месте? → таблица 16.
-6. **Главный риск — Hyprland в WSL:**
+6. **Главный риск — Hyprland в WSL:** ярлык «Linux desktop (host)», то же самое:
    ```
    wsl -d lolssd -u root -- lolssd-wsl session
    ```
@@ -199,14 +175,14 @@ journalctl -b -1 -p err --no-pager | grep -iE 'ext4|nvme|i/o error'
 | # | Что | Результат |
 |---|---|---|
 | 1 | Установка Windows в QEMU на SSD прошла | |
-| 2 | `apply.cmd`: шаги `FAIL` в журнале (какие) | |
-| 3 | `Fallback boot path` | |
+| 2 | `lolssd-setup.log`: шаги `FAIL` (какие); что осталось из приложений | |
+| 3 | Учётка Microsoft не понадобилась, OOBE без вопросов | |
 | 4 | `lolssd check`: порт USB, UASP, Secure Boot | |
 | 5 | `lolssd boot`: запись в NVRAM, загрузилась ли Windows по ней | |
 | 6 | Первая загрузка на железе (синий экран?) | |
 | 7 | Сеть/драйверы: что понадобилось | |
 | 8 | Secure Boot / TPM / VBS / HVCI в Windows | |
-| 9 | `--skip-to-install` у установщика лолки | |
+| 9 | Предустановка Riot (`--skip-to-install`) в виртуалке: скачалось? | |
 | 10 | **Лолка под Vanguard: запустилась? Коды VAN** | |
 | 11 | Нужен ли Secure Boot | |
 | 12 | FPS, ощущение ввода | |

@@ -6,7 +6,8 @@
   - specialize: apply lolssd.reg (shipped inside the image) before OOBE, so encryption,
     updates and the rest are off from the very start;
   - oobeSystem: local administrator "lol", empty password, autologon, no Microsoft account.
-  Everything else runs from SetupComplete.cmd, which Windows starts itself before the first logon.
+  Everything else runs from SetupComplete.cmd, which Windows starts itself before the first logon;
+  at the first logon lolssd-riot.ps1 preinstalls Riot Client and the game.
 -->
 <unattend xmlns="urn:schemas-microsoft-com:unattend" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
   <settings pass="windowsPE">
@@ -82,6 +83,13 @@
         </Password>
         <LogonCount>9999999</LogonCount>
       </AutoLogon>
+      <FirstLogonCommands>
+        <SynchronousCommand wcm:action="add">
+          <Order>1</Order>
+          <CommandLine>powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Program Files\lolssd\lolssd-riot.ps1"</CommandLine>
+          <Description>lolssd: preinstall Riot Client and League of Legends</Description>
+        </SynchronousCommand>
+      </FirstLogonCommands>
     </component>
   </settings>
 </unattend>
