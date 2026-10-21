@@ -30,14 +30,14 @@ func main() {
 		os.Exit(nvramGuard())
 	case "mount":
 		os.Exit(mountHost())
-	case "controller":
-		os.Exit(controller())
+	case "desktop":
+		os.Exit(desktop())
 	default:
 		usage()
 	}
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: lolssd-win nvram-guard | mount | controller")
+	fmt.Fprintln(os.Stderr, "usage: lolssd-win nvram-guard | mount | desktop")
 	os.Exit(2)
 }

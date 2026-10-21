@@ -5,9 +5,10 @@
 #
 # Пусковой дистрибутив — Debian stable (DEBIAN=trixie): это «прибор» для systemd-nspawn,
 # cryptsetup, lvm2, xkbcli и wayvnc (рабочий стол, cmd/lolssd-wsl/desktop.go), он не должен
-# протухать, как rolling release. Основа — официальный корневой архив Debian, из которого собираются их Docker-образы (debuerreotype). Пакеты ставит
-# apt самого Debian внутри пространства имён пользователя: там мы root, а файлы получают
-# настоящих владельцев из диапазона subuid.
+# протухать, как rolling release. Основа — официальный корневой архив Debian, из которого
+# собираются их Docker-образы (debuerreotype). Пакеты ставит apt самого Debian внутри
+# пространства имён пользователя: там мы root, а файлы получают настоящих владельцев из
+# диапазона subuid.
 #
 # Результат: dist/wsl/lolssd.tar (для wsl --import) и dist/wsl/wsl.x64.msi.
 set -euo pipefail

@@ -107,17 +107,6 @@ Step 'register driver install task' {
     Register-ScheduledTask -TaskPath '\lolssd\' -TaskName 'drivers' -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null
 }
 
-# Places the nested Hyprland output windows and handles Ctrl+Alt+F12. Runs in the user's
-# session, not elevated: it only moves the user's own windows.
-Step 'register window controller task' {
-    $exe = "$env:ProgramFiles\lolssd\lolssd-win.exe"
-    $action = New-ScheduledTaskAction -Execute $exe -Argument 'controller'
-    $trigger = New-ScheduledTaskTrigger -AtLogOn
-    $principal = New-ScheduledTaskPrincipal -GroupId 'BUILTIN\Users' -RunLevel Limited
-    $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
-    Register-ScheduledTask -TaskPath '\lolssd\' -TaskName 'controller' -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
-}
-
 # Desktop shortcut that starts the host's desktop (asks for the LUKS password if any).
 # Start menu folder and desktop. The launcher distro is imported at the first logon after
 # a reboot (lolssd-win mount); the host entries need a profile (lolssd profile on the host).
@@ -128,12 +117,12 @@ Step 'Linux shortcuts' {
     $links = @(
         @('Linux terminal (SSD)', '-d lolssd', 'Shell in the Arch system that lives on this disk'),
         @('Linux shell (host)', '-d lolssd -u root -- /usr/local/bin/lolssd-wsl shell', "The host's own Linux: your shell and files"),
-        @('Linux desktop (host)', '-d lolssd -u root -- /usr/local/bin/lolssd-wsl session', "The host's Hyprland, one window per monitor")
+        @('Linux desktop (host)', 'desktop', "The host's Hyprland, full screen on every monitor", "$env:ProgramFiles\lolssd\lolssd-win.exe")
     )
     foreach ($l in $links) {
         foreach ($dir in $menu, "$env:PUBLIC\Desktop") {
             $lnk = $shell.CreateShortcut("$dir\$($l[0]).lnk")
-            $lnk.TargetPath = "$env:SystemRoot\System32\wsl.exe"
+            $lnk.TargetPath = if ($l.Count -gt 3) { $l[3] } else { "$env:SystemRoot\System32\wsl.exe" }
             $lnk.Arguments = $l[1]
             $lnk.Description = $l[2]
             $lnk.Save()

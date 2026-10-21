@@ -57,13 +57,13 @@ make test
 - `lolssd-win mount` — при входе в Windows: если на SSD есть профиль этого компьютера
   (`lolssd profile`), подключает диски хоста в WSL для режима «Linux внутри Windows».
   Нет профиля — ничего не делает.
-- `lolssd-win controller` — после входа: ставит окна рабочего стола Linux на весь экран, каждое
-  на свой монитор. **Ctrl+Alt+F12** отдаёт монитор под курсором Windows (например, под игру) или
-  возвращает его Linux.
+- `lolssd-win desktop` — ярлык «Linux desktop (host)»: Hyprland хоста в WSL и полноэкранный
+  TigerVNC на каждом мониторе. **Ctrl+Alt+F12** (или F8 → Exit viewer) отдаёт монитор под
+  курсором Windows (например, под игру), Ctrl+Alt+F12 возвращает его Linux.
 
 ### Пусковой WSL-дистрибутив (`dist/wsl/lolssd.tar`)
 
-Debian stable (сейчас trixie): это «прибор» для `systemd-nspawn`, `cryptsetup`, `lvm2` и `xkbcli`,
+Debian stable (сейчас trixie): это «прибор» для `systemd-nspawn`, `cryptsetup`, `lvm2`, `xkbcli` и `wayvnc`,
 который не должен протухать, как rolling release. Собирается `build/wsl.sh` из официального
 корневого архива Debian (того, из которого делают их Docker-образы), пакеты ставит его же `apt`
 внутри `unshare --map-auto` — без Docker и root, на любом Linux. Внутри `lolssd-wsl` в

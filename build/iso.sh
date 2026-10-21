@@ -9,7 +9,7 @@
 #     приложения и компоненты Windows удаляет DISM в виртуалке установки (lolssd-setup.ps1);
 #   - наши файлы лежат прямо в образе Windows, установщик ничего не докачивает и не копирует:
 #       \Windows\Setup\Scripts\   SetupComplete.cmd, lolssd-setup.ps1, lolssd.reg
-#       \Program Files\lolssd\    lolssd-win.exe, lolssd-drivers.ps1
+#       \Program Files\lolssd\    lolssd-win.exe, lolssd-drivers.ps1, vncviewer.exe (TigerVNC)
 #       \ProgramData\lolssd\wsl\  пусковой WSL-дистрибутив и MSI WSL (если собраны make wsl)
 #       \Drivers\                 INF-драйверы (если указаны)
 #   - autounattend.xml в корне ISO (установщик ищет его там);
@@ -29,7 +29,7 @@ dist=$repo/dist
 out=$dist/iso/lolssd-$(basename "$src")
 work=$dist/iso/work
 
-for t in 7z wimlib-imagex xorriso hivexregedit; do
+for t in 7z wimlib-imagex xorriso hivexregedit curl; do
 	command -v "$t" >/dev/null || die "нет $t (sudo pacman -S p7zip wimlib libisoburn hivex)"
 done
 [[ -f $src ]] || die "нет $src"
@@ -54,14 +54,29 @@ echo "3/6 чистка образа: Edge, OneDrive, lolssd.reg в реестр 
 "$repo/build/debloat.sh" "$work/tree/sources/install.wim" 1 "$dist/windows/lolssd.reg"
 
 echo "4/6 файлы lolssd в образ"
+# Просмотрщик для рабочего стола Linux (lolssd-win desktop): TigerVNC для Windows, один exe.
+# Скачивается один раз на версию.
+vnc=${TIGERVNC:-1.16.2}
+viewer=$dist/cache/vncviewer64-$vnc.exe
+if [[ ! -s $viewer ]]; then
+	mkdir -p "$dist/cache"
+	curl -fSL --retry 3 -o "$viewer.part" \
+		"https://sourceforge.net/projects/tigervnc/files/stable/$vnc/vncviewer64-$vnc.exe/download" &&
+		mv "$viewer.part" "$viewer" ||
+		echo "  внимание: TigerVNC $vnc не скачан — в образе не будет рабочего стола Linux" >&2
+fi
 {
 	echo "add '$dist/windows/C/Windows/Setup/Scripts' '/Windows/Setup/Scripts'"
 	echo "add '$dist/windows/lolssd.reg' '/Windows/Setup/Scripts/lolssd.reg'"
 	echo "add '$dist/windows/C/Program Files/lolssd' '/Program Files/lolssd'"
+	[[ -s $viewer ]] && echo "add '$viewer' '/Program Files/lolssd/vncviewer.exe'"
 	compgen -G "$dist/wsl/*.msi" >/dev/null ||
 		echo "  (нет MSI WSL в dist/wsl — WSL в образе не будет; make wsl докачает)" >&2
 	if [[ -f $dist/wsl/lolssd.tar ]]; then
-		echo "add '$dist/wsl' '/ProgramData/lolssd/wsl'"
+		# По файлу: недокачанный MSI (*.part) в образ не попадает.
+		for f in "$dist"/wsl/lolssd.tar "$dist"/wsl/*.msi; do
+			[[ -f $f ]] && echo "add '$f' '/ProgramData/lolssd/wsl/$(basename "$f")'"
+		done
 	else
 		echo "  (нет dist/wsl/lolssd.tar — без пускового WSL-дистрибутива; make wsl)" >&2
 	fi

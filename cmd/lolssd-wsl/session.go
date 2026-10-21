@@ -44,7 +44,10 @@ func session() int {
 	}
 
 	var wins []hostprofile.WinMonitor
-	if b, err := os.ReadFile(monitorsPath); err == nil {
+	// Текущие мониторы передаёт lolssd-win desktop (WSLENV); monitors.json — снимок при входе.
+	if env := os.Getenv("LOLSSD_MONITORS"); env != "" {
+		json.Unmarshal([]byte(env), &wins)
+	} else if b, err := os.ReadFile(monitorsPath); err == nil {
 		json.Unmarshal(b, &wins)
 	}
 	n := max(len(wins), 1)
