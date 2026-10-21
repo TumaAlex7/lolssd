@@ -38,6 +38,11 @@ const (
 // Возвращается, когда Hyprland завершился.
 func runHyprland(p hostprofile.Profile, wins []hostprofile.WinMonitor, n int, cfg string) int {
 	card, err := vgemCard()
+	if err == nil {
+		// Узел создаётся root:video с правами 0660, а группа video пускового Debian — не та, что
+		// у пользователя хоста. Отдаём его пользователю сеанса: экрана у vgem нет, это только буферы.
+		err = os.Chown(card, p.User.UID, p.User.GID)
+	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
