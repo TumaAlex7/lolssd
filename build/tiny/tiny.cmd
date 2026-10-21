@@ -1,6 +1,6 @@
 @echo off
 rem lolssd: tiny11-style cleanup of install.wim with DISM, inside WinPE in QEMU (build/tiny.sh).
-rem %1 = drive with the payload: this script, install*.swm (one edition), keep-apps.txt,
+rem %1 = drive with the payload: this script, install*.swm (one edition),
 rem remove-packages.txt, lolssd-offline.reg. The result and the log go to disk 0 (blank),
 rem which build/tiny.sh reads back: \clean.wim, \tiny.log, \done.txt.
 rem English only: cmd reads scripts in the OEM code page.
@@ -26,15 +26,14 @@ call :run %DISM% /Export-Image /SourceImageFile:%IN%\install.swm /SWMFile:%IN%\i
 mkdir %M%
 call :run %DISM% /Mount-Image /ImageFile:W:\install.wim /Index:1 /MountDir:%M% || goto fail
 
-rem Store apps: everything except the keep-list.
-%DISM% /Image:%M% /Get-ProvisionedAppxPackages > W:\appx.txt
-for /f "tokens=2 delims=: " %%p in ('findstr /c:"PackageName" W:\appx.txt') do (
-    echo %%p| findstr /r /i /g:%IN%\keep-apps.txt >nul
-    if errorlevel 1 call :run %DISM% /Image:%M% /Remove-ProvisionedAppxPackage /PackageName:%%p
-)
+rem Store apps are not removed here: WinPE's DISM has no AppX provider (AppxProvider.dll), only
+rem CBS. They are removed by DISM in the installing VM, in full Windows (lolssd-setup.ps1).
 
 rem Windows packages from the remove-list (tiny11's set: IE, WordPad, Media Player, handwriting...).
 %DISM% /Image:%M% /Get-Packages > W:\packages.txt
+echo. >> %LOG%
+echo packages in the image: >> %LOG%
+findstr /c:"Package Identity" W:\packages.txt >> %LOG%
 for /f "tokens=3 delims=: " %%p in ('findstr /c:"Package Identity" W:\packages.txt') do (
     echo %%p| findstr /i /g:%IN%\remove-packages.txt >nul
     if not errorlevel 1 call :run %DISM% /Image:%M% /Remove-Package /PackageName:%%p

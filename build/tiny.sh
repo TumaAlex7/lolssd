@@ -28,7 +28,6 @@ crlf() { sed 's/\r*$/\r/' "$1" >"$2"; }
 
 wimlib-imagex split "$wim" "$w/payload/install.swm" 3800 >/dev/null
 crlf "$repo/build/tiny/tiny.cmd" "$w/payload/tiny.cmd"
-crlf "$repo/build/tiny/keep-apps.txt" "$w/payload/keep-apps.txt"
 crlf "$repo/build/tiny/remove-packages.txt" "$w/payload/remove-packages.txt"
 # Кусты образа загружаются как HKLM\zSYSTEM и HKLM\zSOFTWARE; CurrentControlSet в офлайн-кусте
 # не существует, есть ControlSet001.
