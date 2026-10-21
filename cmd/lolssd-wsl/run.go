@@ -106,6 +106,16 @@ func runIn(p hostprofile.Profile, extra, args []string) int {
 	// Без GPU-PV (старый драйвер видеокарты, выключенный WSLg) работаем на llvmpipe.
 	if _, err := os.Stat("/dev/dxg"); err == nil {
 		nspawn = append(nspawn, "--bind=/dev/dxg", "--property=DeviceAllow=/dev/dxg rw")
+		// d3d12 (libdxcore) ищет драйвер видеокарты Windows по жёсткому пути /usr/lib/wsl/drivers,
+		// поэтому /usr/lib/wsl подключается по тому же пути. Точка подключения — пустой каталог
+		// на диске хоста: создаётся один раз и остаётся навсегда (docs/ARCHITECTURE.md §2).
+		// Подключение только для чтения, на диск в него ничего не пишется, а при аварии
+		// исчезает вместе с ядром WSL — остаётся тот же пустой каталог.
+		if err := os.MkdirAll(filepath.Join(rootDir, "usr/lib/wsl"), 0o755); err == nil {
+			nspawn = append(nspawn, "--bind-ro=/usr/lib/wsl:/usr/lib/wsl")
+		} else {
+			fmt.Fprintln(os.Stderr, "внимание: нет /usr/lib/wsl в системе хоста, d3d12 не найдёт драйвер:", err)
+		}
 	} else {
 		fmt.Fprintln(os.Stderr, "внимание: нет /dev/dxg, графика без ускорения")
 	}
