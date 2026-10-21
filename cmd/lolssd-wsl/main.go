@@ -34,12 +34,14 @@ func main() {
 		os.Exit(run(os.Args[2:]))
 	case "session":
 		os.Exit(session())
+	case "shell":
+		os.Exit(shell())
 	default:
 		usage()
 	}
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "использование: lolssd-wsl up | down | session | run [--] команда [аргументы]")
+	fmt.Fprintln(os.Stderr, "использование: lolssd-wsl up | down | shell | session | run [--] команда [аргументы]")
 	os.Exit(2)
 }

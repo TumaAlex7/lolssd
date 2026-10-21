@@ -27,10 +27,14 @@ dist:
 	cp README.md dist/LOLSSD/README.md
 	cp build/lolssd.sh dist/LOLSSD/lolssd.sh
 
-# Нужен docker или podman. Результат: dist/wsl/lolssd.tar для
-#   wsl --import lolssd C:\ProgramData\lolssd\wsl lolssd.tar
+# Нужен docker или podman. Результат: dist/wsl/lolssd.tar (пусковой дистрибутив) и
+# dist/wsl/wsl.x64.msi; make iso кладёт оба в образ, импорт — при первом входе (lolssd-win mount).
 wsl: dist
 	@test -n "$(CONTAINER)" || { echo "нужен docker или podman"; exit 1; }
+	# MSI WSL с GitHub Microsoft: ставится в образ офлайн (wsl.exe в Windows — только заглушка).
+	url=$$(curl -fsSL https://api.github.com/repos/microsoft/WSL/releases/latest | \
+		grep -o '"browser_download_url": *"[^"]*x64\.msi"' | head -1 | sed 's/.*"\(https[^"]*\)"/\1/') && \
+		test -n "$$url" && curl -fsSL -o dist/wsl/wsl.x64.msi "$$url" && echo "WSL: $$url"
 	cp build/wsl/Dockerfile build/wsl/wsl.conf dist/wsl/
 	$(CONTAINER) build -t lolssd-wsl dist/wsl
 	id=$$($(CONTAINER) create lolssd-wsl) && $(CONTAINER) export $$id > dist/wsl/lolssd.tar; s=$$?; $(CONTAINER) rm $$id >/dev/null; exit $$s

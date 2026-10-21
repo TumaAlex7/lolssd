@@ -63,6 +63,15 @@ Step 'WSL and Virtual Machine Platform' {
     Run bcdedit.exe /set '{current}' hypervisorlaunchtype auto
 }
 
+# wsl.exe in Windows is only a stub; WSL itself is a package. The MSI from Microsoft's GitHub
+# ships in the image (make wsl), so no Store or network is needed.
+Step 'install WSL' {
+    $msi = Get-ChildItem "$env:ProgramData\lolssd\wsl\*.msi" -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $msi) { throw 'no WSL MSI in \ProgramData\lolssd\wsl (make wsl)' }
+    $p = Start-Process msiexec.exe -ArgumentList '/i', "`"$($msi.FullName)`"", '/qn', '/norestart' -Wait -PassThru
+    if ($p.ExitCode -notin 0, 3010) { throw "msiexec exited with $($p.ExitCode)" }
+}
+
 # ShippedWithReserves in lolssd.reg works only if set before setup created the reserve.
 Step 'reserved storage off' {
     Run dism.exe /Online /Set-ReservedStorageState /State:Disabled /Quiet
@@ -110,11 +119,26 @@ Step 'register window controller task' {
 }
 
 # Desktop shortcut that starts the host's desktop (asks for the LUKS password if any).
-Step 'Linux desktop shortcut' {
-    $lnk = (New-Object -ComObject WScript.Shell).CreateShortcut("$env:PUBLIC\Desktop\Linux.lnk")
-    $lnk.TargetPath = "$env:SystemRoot\System32\wsl.exe"
-    $lnk.Arguments = '-d lolssd -u root -- /usr/local/bin/lolssd-wsl session'
-    $lnk.Save()
+# Start menu folder and desktop. The launcher distro is imported at the first logon after
+# a reboot (lolssd-win mount); the host entries need a profile (lolssd profile on the host).
+Step 'Linux shortcuts' {
+    $shell = New-Object -ComObject WScript.Shell
+    $menu = "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Linux"
+    New-Item -ItemType Directory -Force $menu | Out-Null
+    $links = @(
+        @('Linux terminal (SSD)', '-d lolssd', 'Shell in the Arch system that lives on this disk'),
+        @('Linux shell (host)', '-d lolssd -u root -- /usr/local/bin/lolssd-wsl shell', "The host's own Linux: your shell and files"),
+        @('Linux desktop (host)', '-d lolssd -u root -- /usr/local/bin/lolssd-wsl session', "The host's Hyprland, one window per monitor")
+    )
+    foreach ($l in $links) {
+        foreach ($dir in $menu, "$env:PUBLIC\Desktop") {
+            $lnk = $shell.CreateShortcut("$dir\$($l[0]).lnk")
+            $lnk.TargetPath = "$env:SystemRoot\System32\wsl.exe"
+            $lnk.Arguments = $l[1]
+            $lnk.Description = $l[2]
+            $lnk.Save()
+        }
+    }
 }
 
 # ---------------------------------------------------------------- tiny

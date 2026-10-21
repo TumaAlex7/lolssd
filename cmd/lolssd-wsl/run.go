@@ -53,6 +53,23 @@ func run(args []string) int {
 	return runIn(p, nil, args)
 }
 
+// shell — оболочка пользователя в системе хоста, в окне терминала Windows (ярлык «Linux shell»).
+func shell() int {
+	if code := up(); code != 0 {
+		return code
+	}
+	p, err := loadProfile()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	sh := p.User.Shell
+	if sh == "" {
+		sh = "/bin/sh"
+	}
+	return runIn(p, nil, []string{sh, "-l"})
+}
+
 // runIn — systemd-nspawn без --boot. Графика и звук идут через WSLg, ускорение — через
 // GPU-PV (/dev/dxg + d3d12 в Mesa хоста). На диск хоста nspawn ничего не пишет: журнал,
 // часовой пояс и resolv.conf не копируются. extra — дополнительные аргументы nspawn.

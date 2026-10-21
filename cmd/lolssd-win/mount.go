@@ -53,6 +53,7 @@ func writeWSLConfig() error {
 // Запускается при входе пользователя, с повышенными правами (так требует wsl --mount).
 func mountHost() int {
 	os.Remove(activeProfile)
+	ensureDistro()
 
 	vol, err := lolssdVolume()
 	if err != nil {
@@ -195,6 +196,36 @@ func applyScancodeMap(p hostprofile.Profile) bool {
 	}
 	log.Printf("Scancode Map обновлён (%d переназначений), нужна перезагрузка", len(plan.Scancodes))
 	return true
+}
+
+// ensureDistro импортирует пусковой WSL-дистрибутив из образа (\ProgramData\lolssd\wsl), если он
+// ещё не зарегистрирован у этого пользователя: WSL регистрирует дистрибутивы на пользователя.
+// Не выйдет до первой перезагрузки после включения компонентов WSL — тогда при следующем входе.
+// Нужен и без профиля хоста: в нём открывается ярлык «Linux terminal (SSD)».
+func ensureDistro() {
+	dir := filepath.Join(os.Getenv("ProgramData"), "lolssd", "wsl")
+	tar := filepath.Join(dir, "lolssd.tar")
+	if _, err := os.Stat(tar); err != nil {
+		return
+	}
+	wsl := func(args ...string) (string, error) {
+		cmd := exec.Command("wsl.exe", args...)
+		cmd.Env = append(os.Environ(), "WSL_UTF8=1")
+		out, err := cmd.CombinedOutput()
+		return strings.TrimSpace(string(out)), err
+	}
+	if list, err := wsl("--list", "--quiet"); err == nil {
+		for _, name := range strings.Fields(list) {
+			if strings.EqualFold(name, "lolssd") {
+				return
+			}
+		}
+	}
+	if out, err := wsl("--import", "lolssd", filepath.Join(dir, "distro"), tar); err != nil {
+		log.Printf("wsl --import lolssd: %v: %s", err, out)
+		return
+	}
+	log.Println("пусковой дистрибутив lolssd импортирован")
 }
 
 // lolssdVolume находит том раздела LOLSSD по метке ФС и возвращает его корень, например `D:\`.
