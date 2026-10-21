@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
-# lolssd, прототип: установить Windows на внешний SSD из Linux через QEMU (docs/PROTOTYPE.md).
-#   sudo build/prototype/vm-install.sh /dev/sdX Win11.iso [РАЗМЕР_ПОД_WINDOWS, например 128G]
-# Размечает SSD: ESP, раздел LOLSSD, место под Windows. Без размера Windows отдаётся весь
-# остаток диска; с размером — столько гигабайт, а остаток становится разделом DATA (NTFS) для
-# своих файлов. Кладёт на LOLSSD содержимое dist/, затем запускает установку Windows в QEMU прямо
-# на этот диск. Окно QEMU открывается от имени пользователя, вызвавшего sudo.
+# lolssd: установить Windows на внешний SSD из Linux через QEMU (docs/PROTOTYPE.md).
+#   sudo build/prototype/vm-install.sh /dev/sdX dist/iso/lolssd-*.iso [РАЗМЕР_ПОД_WINDOWS, например 128G]
+# ISO собирается заранее: make iso ISO=... — в нём уже всё: файл ответов, наши файлы, драйверы.
+# Скрипт размечает диск: ESP, раздел LOLSSD (утилита для Linux и профили), место под Windows.
+# Без размера Windows отдаётся весь остаток диска; с размером — столько гигабайт, а остаток
+# становится разделом DATA (NTFS) для своих файлов. Затем запускает установку в QEMU прямо на
+# этот диск. Окно QEMU открывается от имени пользователя, вызвавшего sudo.
 set -euo pipefail
 
 die() { echo "ошибка: $*" >&2; exit 1; }
 
-[[ $# == 2 || $# == 3 ]] || die "использование: sudo $0 /dev/sdX Windows.iso [размер под Windows, например 128G]"
+[[ $# == 2 || $# == 3 ]] || die "использование: sudo $0 /dev/sdX dist/iso/lolssd-*.iso [размер под Windows, например 128G]"
 dev=$1 iso=$(realpath "$2")
 win_gib=
 if [[ $# == 3 ]]; then
@@ -25,20 +26,20 @@ name=$(basename "$dev")
 [[ -b $dev && -e /sys/block/$name ]] || die "$dev — не диск целиком (нужен /dev/sdX, не раздел)"
 [[ $(readlink -f "/sys/block/$name") == */usb* ]] || die "$dev не на USB — отказ, чтобы не стереть внутренний диск"
 ! grep -q "^/dev/$name" /proc/mounts || die "разделы $dev смонтированы, отмонтируйте их"
-[[ -f $iso ]] || die "нет ISO $iso"
-[[ -d $repo/dist/LOLSSD && -d $repo/dist/windows ]] || die "сначала make dist"
+[[ -f $iso ]] || die "нет ISO $iso (make iso ISO=...)"
+[[ $(basename "$iso") == lolssd-* ]] || die "нужен ISO, собранный make iso (dist/iso/lolssd-*.iso), а не исходный"
+[[ -d $repo/dist/LOLSSD ]] || die "сначала make dist"
 for t in qemu-system-x86_64 sfdisk mkfs.fat swtpm; do
 	command -v "$t" >/dev/null || die "нет $t (sudo pacman -S qemu-desktop edk2-ovmf dosfstools swtpm)"
 done
-# Прошивка с поддержкой Secure Boot и виртуальный TPM 2.0: установщик Windows 11 проверяет оба,
-# обход через LabConfig в новом установщике срабатывает не всегда.
+# Прошивка с поддержкой Secure Boot и виртуальный TPM 2.0: установщик Windows 11 проверяет оба.
 code=/usr/share/edk2/x64/OVMF_CODE.secboot.4m.fd vars=/usr/share/edk2/x64/OVMF_VARS.4m.fd
 [[ -f $code && -f $vars ]] || die "нет OVMF ($code), sudo pacman -S edk2-ovmf"
 
-# 1 МиБ выравнивания + ESP 512 МиБ + LOLSSD 256 МиБ, дальше место под Windows.
+# 1 МиБ выравнивания + ESP 512 МиБ + LOLSSD 512 МиБ, дальше место под Windows.
 data_start_mib=
 if [[ -n $win_gib ]]; then
-	data_start_mib=$(( 1 + 512 + 256 + win_gib * 1024 ))
+	data_start_mib=$(( 1 + 512 + 512 + win_gib * 1024 ))
 	disk_mib=$(( $(blockdev --getsize64 "$dev") / 1024 / 1024 ))
 	(( disk_mib - data_start_mib >= 1024 )) || die "на диске $(( disk_mib / 1024 ))G — после ${win_gib}G под Windows не остаётся места под DATA; запустите без размера"
 	command -v mkfs.ntfs >/dev/null || die "нет mkfs.ntfs (sudo pacman -S ntfs-3g)"
@@ -46,9 +47,9 @@ fi
 
 lsblk -o NAME,SIZE,MODEL,TRAN "$dev"
 if [[ -n $win_gib ]]; then
-	echo "Разметка: EFI 512M, LOLSSD 256M, Windows ${win_gib}G, DATA (NTFS) — остальное."
+	echo "Разметка: EFI 512M, LOLSSD 512M, Windows ${win_gib}G, DATA (NTFS) — остальное."
 else
-	echo "Разметка: EFI 512M, LOLSSD 256M, Windows — весь остаток диска."
+	echo "Разметка: EFI 512M, LOLSSD 512M, Windows — весь остаток диска."
 fi
 read -rp "Всё на $dev будет стёрто. Введите $name для подтверждения: " ans
 [[ $ans == "$name" ]] || die "отменено"
@@ -59,7 +60,7 @@ basic=EBD0A0A2-B9E5-4433-87C0-68B6B72699C7
 {
 	echo "label: gpt"
 	echo "size=512MiB, type=uefi, name=EFI"
-	echo "size=256MiB, type=$basic, name=LOLSSD"
+	echo "size=512MiB, type=$basic, name=LOLSSD"
 	[[ -z $data_start_mib ]] || echo "start=${data_start_mib}MiB, type=$basic, name=DATA"
 } | sfdisk --wipe always --wipe-partitions always "$dev"
 udevadm settle
@@ -70,15 +71,11 @@ mkfs.fat -F 32 -n LOLSSD "${dev}2" >/dev/null
 mnt=$(mktemp -d)
 mount "${dev}2" "$mnt"
 cp -r "$repo/dist/LOLSSD/." "$mnt/"
-mkdir -p "$mnt/windows"
-cp -r "$repo/dist/windows/." "$mnt/windows/"
-sed 's/\r*$/\r/' "$repo/build/prototype/apply.cmd" > "$mnt/windows/apply.cmd"
 umount "$mnt"
 rmdir "$mnt"
 sync
 
 work=$(mktemp -d)
-cp "$repo/build/prototype/autounattend.xml" "$work/"
 cp "$vars" "$work/OVMF_VARS.fd"
 mkdir "$work/tpm"
 chown -R "$SUDO_USER" "$work"
@@ -89,10 +86,10 @@ trap 'setfacl -x "u:$SUDO_USER" "$dev"; rm -rf "$work"' EXIT
 sudo -u "$SUDO_USER" swtpm socket --tpm2 --tpmstate dir="$work/tpm" \
 	--ctrl type=unixio,path="$work/tpm/sock" --terminate --daemon
 
-echo "Запускаю QEMU. В начале нажмите любую клавишу, чтобы загрузиться с ISO."
-echo "В установщике: «У меня нет ключа», редакция как у заводской Windows ноутбука (обычно Home), диск — незанятое место."
-# Диск по AHCI: драйвер есть в Windows из коробки. Сети нет: так OOBE не просит учётку Microsoft.
-# autounattend.xml — на виртуальной USB-флешке из каталога (vvfat), установщик ищет его там.
+echo "Запускаю QEMU. В установщике: язык, «У меня нет ключа», диск — единственное незанятое место."
+echo "Дальше всё само: после первого входа Windows готова, выключите её (Пуск → Завершение работы)."
+# Диск по AHCI, сеть e1000e: драйверы для обоих есть в Windows из коробки. Учётку Microsoft OOBE
+# не попросит: локальная учётная запись задана в файле ответов.
 sudo -u "$SUDO_USER" --preserve-env=WAYLAND_DISPLAY,DISPLAY,XDG_RUNTIME_DIR \
 	qemu-system-x86_64 -enable-kvm -machine q35,smm=on -cpu host -smp 4 -m 6G \
 	-global driver=cfi.pflash01,property=secure,value=on \
@@ -102,7 +99,7 @@ sudo -u "$SUDO_USER" --preserve-env=WAYLAND_DISPLAY,DISPLAY,XDG_RUNTIME_DIR \
 	-device ahci,id=ahci \
 	-drive if=none,id=ssd,format=raw,cache=none,file="$dev" -device ide-hd,drive=ssd,bus=ahci.0,bootindex=1 \
 	-drive if=none,id=cd,media=cdrom,file="$iso" -device ide-cd,drive=cd,bus=ahci.1,bootindex=0 \
-	-device qemu-xhci -drive if=none,id=unattend,format=raw,readonly=on,file="fat:$work" -device usb-storage,drive=unattend \
-	-device usb-tablet -nic none
+	-device qemu-xhci -device usb-tablet -nic user,model=e1000e
 
-echo "QEMU закрыт. Если apply.cmd отработал и Windows выключена — можно грузиться с SSD: sudo lolssd boot"
+echo "QEMU закрыт. Если Windows выключилась после первого входа — можно грузиться с SSD:"
+echo "  sudo sh /run/media/\$USER/LOLSSD/lolssd.sh boot"

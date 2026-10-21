@@ -22,6 +22,11 @@ function Step($name, [scriptblock]$body) {
     }
 }
 
+function Set-Reg($path, $name, $value, $type = 'DWord') {
+    if (-not (Test-Path $path)) { New-Item -Path $path -Force | Out-Null }
+    New-ItemProperty -Path $path -Name $name -Value $value -PropertyType $type -Force | Out-Null
+}
+
 function Run($exe) {
     & $exe @args | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "$exe $args exited with $LASTEXITCODE" }
@@ -110,6 +115,57 @@ Step 'Linux desktop shortcut' {
     $lnk.TargetPath = "$env:SystemRoot\System32\wsl.exe"
     $lnk.Arguments = '-d lolssd -u root -- /usr/local/bin/lolssd-wsl session'
     $lnk.Save()
+}
+
+# ---------------------------------------------------------------- tiny
+# Runs before the first logon, so removing the provisioned packages is enough: no user has
+# them installed yet. Kept: runtimes the rest depends on, Terminal (Linux shells open in it),
+# Windows Security (memory integrity status), winget, Store, Notepad.
+$keepApps = '^(Microsoft\.(VCLibs|UI\.Xaml|NET\.|WindowsAppRuntime|DesktopAppInstaller|WindowsTerminal|SecHealthUI|WindowsStore|StorePurchaseApp|WindowsNotepad))'
+Step 'remove provisioned apps' {
+    $removed = @()
+    foreach ($p in Get-AppxProvisionedPackage -Online) {
+        if ($p.DisplayName -match $keepApps) { continue }
+        try {
+            Remove-AppxProvisionedPackage -Online -PackageName $p.PackageName -AllUsers -ErrorAction Stop | Out-Null
+            $removed += $p.DisplayName
+        } catch { Log "      could not remove $($p.DisplayName): $_" }
+    }
+    Log "      removed: $($removed -join ', ')"
+}
+
+# OneDrive installs itself per user from the default profile's Run key.
+Step 'no OneDrive for new users' {
+    Run reg.exe load 'HKU\lolssdDefault' "$env:SystemDrive\Users\Default\NTUSER.DAT"
+    try {
+        Remove-ItemProperty 'Registry::HKU\lolssdDefault\Software\Microsoft\Windows\CurrentVersion\Run' -Name OneDriveSetup -ErrorAction SilentlyContinue
+    } finally {
+        [gc]::Collect()
+        Run reg.exe unload 'HKU\lolssdDefault'
+    }
+}
+
+# Outside the EEA the Edge uninstaller refuses unless EdgeUpdateDev allows it. WebView2 stays.
+Step 'remove Edge' {
+    $setup = Get-ChildItem "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\*\Installer\setup.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($setup) {
+        Set-Reg 'HKLM:\SOFTWARE\Microsoft\EdgeUpdateDev' 'AllowUninstall' 1
+        & $setup.FullName --uninstall --system-level --force-uninstall | Out-Null
+        if (Test-Path "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe") { throw 'Edge is still installed (uninstall refused)' }
+    }
+    Remove-Item "$env:PUBLIC\Desktop\Microsoft Edge.lnk" -ErrorAction SilentlyContinue
+}
+
+# The real machine has no NVRAM entry from this install (setup wrote it to the VM's NVRAM);
+# lolssd boot and firmware boot menus use the removable-media path \EFI\BOOT\BOOTX64.EFI.
+Step 'fallback boot path on the ESP' {
+    Run mountvol.exe S: /S
+    try {
+        if (-not (Test-Path 'S:\EFI\BOOT\BOOTX64.EFI')) {
+            New-Item -ItemType Directory -Force 'S:\EFI\BOOT' | Out-Null
+            Copy-Item 'S:\EFI\Microsoft\Boot\bootmgfw.efi' 'S:\EFI\BOOT\BOOTX64.EFI'
+        }
+    } finally { mountvol.exe S: /D | Out-Null }
 }
 
 Log "done, $failed step(s) failed"

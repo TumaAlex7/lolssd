@@ -12,7 +12,7 @@ WIN := dist/windows/C
 # docker или podman, что найдётся
 CONTAINER ?= $(shell command -v podman 2>/dev/null || command -v docker 2>/dev/null)
 
-.PHONY: dist wsl test clean
+.PHONY: dist wsl iso test clean
 
 dist:
 	mkdir -p dist/LOLSSD/host dist/LOLSSD/profiles "$(WIN)/Program Files/lolssd" "$(WIN)/Windows/Setup/Scripts" dist/wsl
@@ -35,6 +35,12 @@ wsl: dist
 	$(CONTAINER) build -t lolssd-wsl dist/wsl
 	id=$$($(CONTAINER) create lolssd-wsl) && $(CONTAINER) export $$id > dist/wsl/lolssd.tar; s=$$?; $(CONTAINER) rm $$id >/dev/null; exit $$s
 	rm dist/wsl/Dockerfile dist/wsl/wsl.conf
+
+# Установочный ISO со всем внутри: make iso ISO=~/Downloads/Win11.iso [DRIVERS=~/lolssd-drivers] [EDITION="Windows 11 Pro"]
+EDITION ?= Windows 11 Home
+iso: dist
+	@test -n "$(ISO)" || { echo "укажите ISO=путь/к/Windows.iso"; exit 1; }
+	build/iso.sh "$(ISO)" "$(DRIVERS)" "$(EDITION)"
 
 test:
 	$(GO) vet ./...

@@ -92,6 +92,70 @@ Windows Registry Editor Version 5.00
 "ACSettingIndex"=dword:00000000
 "DCSettingIndex"=dword:00000000
 
+; ---------------------------------------------------------------- nothing extra
+
+; No consumer features: sponsored and "suggested" apps and pins (Steam, games), cloud content.
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\CloudContent]
+"DisableWindowsConsumerFeatures"=dword:00000001
+"DisableCloudOptimizedContent"=dword:00000001
+"DisableConsumerAccountStateContent"=dword:00000001
+
+; No settings sync or restore from a Microsoft account: signing in once restored the
+; author's apps and pins onto this disk.
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\SettingSync]
+"DisableSettingSync"=dword:00000002
+"DisableSettingSyncUserOverride"=dword:00000001
+
+; No OneDrive (it also moves the Desktop into the cloud), Copilot or widgets.
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\OneDrive]
+"DisableFileSyncNGSC"=dword:00000001
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\WindowsCopilot]
+"TurnOffWindowsCopilot"=dword:00000001
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Dsh]
+"AllowNewsAndInterests"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\DataCollection]
+"AllowTelemetry"=dword:00000000
+
+; No drivers or manufacturer apps from the network: drivers come from \Drivers on the disk.
+; This is how a "heavy Razer driver" (vendor software) arrived on the first try.
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\DriverSearching]
+"DontSearchWindowsUpdate"=dword:00000001
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\DriverSearching]
+"SearchOrderConfig"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\Device Metadata]
+"PreventDeviceMetadataFromNetwork"=dword:00000001
+
+; Services a game-only Windows on an external disk does not need. SysMain (prefetching) and
+; WSearch (indexing) hammer the disk, which is the bottleneck over USB.
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\SysMain]
+"Start"=dword:00000004
+
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\WSearch]
+"Start"=dword:00000004
+
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\DiagTrack]
+"Start"=dword:00000004
+
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\dmwappushservice]
+"Start"=dword:00000004
+
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\MapsBroker]
+"Start"=dword:00000004
+
+; ---------------------------------------------------------------- keyboard
+
+; Left/right Win → F13/F14 (Meta transport, docs/ARCHITECTURE.md §7): Windows stops grabbing
+; them (no Start menu in the middle of a game; Start stays on Ctrl+Esc) and they reach Linux,
+; where Hyprland turns them back into Super_L/Super_R. lolssd-win mount rewrites this value
+; with the profile's keyd remaps on top. Takes effect after a reboot.
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Keyboard Layout]
+"Scancode Map"=hex:00,00,00,00,00,00,00,00,03,00,00,00,64,00,5b,e0,65,00,5c,e0,00,00,00,00
+
 ; ---------------------------------------------------------------- last on purpose
 
 ; ACL-protected on a running system: "reg import" stops at the first error, so this key

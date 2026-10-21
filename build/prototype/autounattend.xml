@@ -1,11 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  lolssd, prototype install in QEMU (docs/PROTOTYPE.md). Deliberately partial:
-  setup still asks for the language, the product key ("I don't have a product key")
-  and the disk (pick the unallocated space after the LOLSSD partition).
-  It bypasses the TPM/Secure Boot/RAM checks of the VM, creates a local administrator
-  "lol" with an empty password and autologon, and runs apply.cmd from the LOLSSD partition
-  at the first logon.
+  lolssd answer file, lives in the root of the ISO built by build/iso.sh.
+  Setup still asks for the language and the disk (pick the only unallocated space).
+  - windowsPE: bypass the TPM/Secure Boot/RAM checks in case the VM lacks them;
+  - specialize: apply lolssd.reg (shipped inside the image) before OOBE, so encryption,
+    updates and the rest are off from the very start;
+  - oobeSystem: local administrator "lol", empty password, autologon, no Microsoft account.
+  Everything else runs from SetupComplete.cmd, which Windows starts itself before the first logon.
 -->
 <unattend xmlns="urn:schemas-microsoft-com:unattend" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
   <settings pass="windowsPE">
@@ -35,6 +36,11 @@
         <RunSynchronousCommand wcm:action="add">
           <Order>1</Order>
           <Path>reg add HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE /v BypassNRO /t REG_DWORD /d 1 /f</Path>
+        </RunSynchronousCommand>
+        <RunSynchronousCommand wcm:action="add">
+          <Order>2</Order>
+          <Path>reg import C:\Windows\Setup\Scripts\lolssd.reg</Path>
+          <Description>lolssd: machine settings (the last key, WaaSMedicSvc, may fail on ACL)</Description>
         </RunSynchronousCommand>
       </RunSynchronous>
     </component>
@@ -76,13 +82,6 @@
         </Password>
         <LogonCount>9999999</LogonCount>
       </AutoLogon>
-      <FirstLogonCommands>
-        <SynchronousCommand wcm:action="add">
-          <Order>1</Order>
-          <CommandLine>cmd /c for %d in (D E F G H I) do @if exist %d:\windows\apply.cmd start "lolssd" %d:\windows\apply.cmd</CommandLine>
-          <Description>lolssd: put files in place and configure Windows</Description>
-        </SynchronousCommand>
-      </FirstLogonCommands>
     </component>
   </settings>
 </unattend>
