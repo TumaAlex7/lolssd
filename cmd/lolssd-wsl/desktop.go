@@ -117,6 +117,7 @@ func runHyprland(p hostprofile.Profile, wins []hostprofile.WinMonitor, n int, cf
 		code = runIn(p, extra, cmd)
 		close(stop)
 		<-done
+		saveHyprLog(strings.TrimPrefix(driver, "GALLIUM_DRIVER="))
 		if code == 0 || time.Since(began) > 20*time.Second {
 			break
 		}
@@ -127,6 +128,18 @@ func runHyprland(p hostprofile.Profile, wins []hostprofile.WinMonitor, n int, cf
 		fmt.Printf("\nHyprland с %s не запустился (код %d), пробую следующий вариант\n\n", driver, code)
 	}
 	return code
+}
+
+// saveHyprLog копирует журнал Hyprland (он в XDG_RUNTIME_DIR сеанса, в памяти) в
+// C:\ProgramData\lolssd\hyprland-<драйвер>.log, рядом с session.log: его можно прочитать и после.
+func saveHyprLog(driver string) {
+	logs, _ := filepath.Glob(filepath.Join(xdgDir, "hypr", "*", "hyprland.log"))
+	if len(logs) == 0 {
+		return
+	}
+	if b, err := os.ReadFile(logs[len(logs)-1]); err == nil {
+		os.WriteFile("/mnt/c/ProgramData/lolssd/hyprland-"+driver+".log", b, 0o644)
+	}
 }
 
 // gbmProbe собирает в контейнере build/hypr/gbm-probe.c и запускает его с окружением Hyprland:
