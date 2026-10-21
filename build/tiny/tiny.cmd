@@ -17,23 +17,27 @@ diskpart /s X:\diskpart.txt > X:\diskpart.log
 if not exist W:\ (type X:\diskpart.log & goto :eof)
 set LOG=W:\tiny.log
 echo lolssd tiny: %date% %time% > %LOG%
+rem DISM keeps temporary files on X:, the WinPE RAM disk of a few tens of MB: without a scratch
+rem directory on the work disk it stops with error 112 (disk full) halfway through an export.
+mkdir W:\scratch
+set DISM=dism /English /ScratchDir:W:\scratch /LogPath:W:\dism.log
 
-call :run dism /English /Export-Image /SourceImageFile:%IN%\install.swm /SWMFile:%IN%\install*.swm /SourceIndex:1 /DestinationImageFile:W:\install.wim /Compress:fast || goto fail
+call :run %DISM% /Export-Image /SourceImageFile:%IN%\install.swm /SWMFile:%IN%\install*.swm /SourceIndex:1 /DestinationImageFile:W:\install.wim /Compress:fast || goto fail
 mkdir %M%
-call :run dism /English /Mount-Image /ImageFile:W:\install.wim /Index:1 /MountDir:%M% || goto fail
+call :run %DISM% /Mount-Image /ImageFile:W:\install.wim /Index:1 /MountDir:%M% || goto fail
 
 rem Store apps: everything except the keep-list.
-dism /English /Image:%M% /Get-ProvisionedAppxPackages > W:\appx.txt
+%DISM% /Image:%M% /Get-ProvisionedAppxPackages > W:\appx.txt
 for /f "tokens=2 delims=: " %%p in ('findstr /c:"PackageName" W:\appx.txt') do (
     echo %%p| findstr /r /i /g:%IN%\keep-apps.txt >nul
-    if errorlevel 1 call :run dism /English /Image:%M% /Remove-ProvisionedAppxPackage /PackageName:%%p
+    if errorlevel 1 call :run %DISM% /Image:%M% /Remove-ProvisionedAppxPackage /PackageName:%%p
 )
 
 rem Windows packages from the remove-list (tiny11's set: IE, WordPad, Media Player, handwriting...).
-dism /English /Image:%M% /Get-Packages > W:\packages.txt
+%DISM% /Image:%M% /Get-Packages > W:\packages.txt
 for /f "tokens=3 delims=: " %%p in ('findstr /c:"Package Identity" W:\packages.txt') do (
     echo %%p| findstr /i /g:%IN%\remove-packages.txt >nul
-    if not errorlevel 1 call :run dism /English /Image:%M% /Remove-Package /PackageName:%%p
+    if not errorlevel 1 call :run %DISM% /Image:%M% /Remove-Package /PackageName:%%p
 )
 
 rem Edge (WebView2 stays) and OneDrive.
@@ -66,9 +70,9 @@ call :run reg unload HKLM\zDEFAULT
 call :run reg unload HKLM\zSOFTWARE
 call :run reg unload HKLM\zSYSTEM
 
-call :run dism /English /Unmount-Image /MountDir:%M% /Commit || goto fail
+call :run %DISM% /Unmount-Image /MountDir:%M% /Commit || goto fail
 rem Export rebuilds the image without the removed data.
-call :run dism /English /Export-Image /SourceImageFile:W:\install.wim /SourceIndex:1 /DestinationImageFile:W:\clean.wim /Compress:max || goto fail
+call :run %DISM% /Export-Image /SourceImageFile:W:\install.wim /SourceIndex:1 /DestinationImageFile:W:\clean.wim /Compress:max || goto fail
 del W:\install.wim
 echo done > W:\done.txt
 echo lolssd tiny: done %date% %time% >> %LOG%
@@ -76,7 +80,7 @@ goto :eof
 
 :fail
 echo FAILED, see the lines above >> %LOG%
-dism /English /Unmount-Image /MountDir:%M% /Discard >nul 2>&1
+%DISM% /Unmount-Image /MountDir:%M% /Discard >nul 2>&1
 goto :eof
 
 :run

@@ -40,28 +40,36 @@ echo lolssd >"$w/payload/lolssd-tiny.txt"
 cp "$tree/sources/boot.wim" "$w/boot.wim"
 chmod u+w "$w/boot.wim"
 crlf "$repo/build/tiny/startnet.cmd" "$w/startnet.cmd"
-echo "add '$w/startnet.cmd' '/Windows/System32/startnet.cmd'" | wimlib-imagex update "$w/boot.wim" 1 >/dev/null
+# --rebuild: загрузчик Windows не грузит WIM, в который wimlib дописал данные в конец
+# (0xc00000bb на winload.efi); переписанный целиком файл он принимает.
+echo "add '$w/startnet.cmd' '/Windows/System32/startnet.cmd'" | wimlib-imagex update "$w/boot.wim" 1 --rebuild >/dev/null
 wimlib-imagex info "$w/boot.wim" --boot 1 >/dev/null
 
-grafts=(efi="$tree/efi" bootmgr.efi="$tree/bootmgr.efi" sources/boot.wim="$w/boot.wim")
-for f in "$w/payload"/*; do grafts+=("$(basename "$f")=$f"); done
-xorriso -as mkisofs -quiet -iso-level 3 -J -joliet-long -V LOLSSD_TINY \
-	-e efi/microsoft/boot/efisys_noprompt.bin -no-emul-boot \
-	-graft-points -o "$w/tiny.iso" "${grafts[@]}"
+# Два диска: загрузочный — только WinPE, полезная нагрузка — отдельно. Если положить части образа
+# (по 3,8 ГБ) рядом, boot.wim уезжает за 4 ГБ от начала диска, и загрузчик Windows его не читает.
+# boot/ нужен: там boot.sdi, RAM-диск, на котором работает WinPE (без него 0xc000000f).
+xorriso -as mkisofs -quiet -iso-level 3 -J -joliet-long -V LOLSSD_PE \
+	-e efi/microsoft/boot/efisys_noprompt.bin -no-emul-boot -graft-points -o "$w/pe.iso" \
+	efi="$tree/efi" boot="$tree/boot" bootmgr.efi="$tree/bootmgr.efi" sources/boot.wim="$w/boot.wim"
+xorriso -as mkisofs -quiet -iso-level 3 -J -joliet-long -V LOLSSD_TINY -o "$w/payload.iso" "$w/payload"
 rm -rf "$w/payload"
 
 # Рабочий диск: образ, смонтированный DISM'ом, раскрывается в ~25 ГБ файлов.
 truncate -s 64G "$w/work.img"
 cp "$vars" "$w/vars.fd"
 echo "  чистка в виртуальной машине (DISM), 15–30 минут; окна не будет"
-qemu-system-x86_64 -enable-kvm -machine q35 -cpu host -smp 4 -m 4G -display none -nic none \
+# TINY_QEMU — дополнительные аргументы для отладки, например монитор для снимков экрана:
+#   TINY_QEMU="-monitor unix:/tmp/tiny.mon,server,nowait"
+# shellcheck disable=SC2086
+qemu-system-x86_64 -enable-kvm -machine q35 -cpu host -smp 4 -m 4G -display none -nic none ${TINY_QEMU:-} \
 	-drive if=pflash,format=raw,readonly=on,file="$code" -drive if=pflash,format=raw,file="$w/vars.fd" \
 	-device ahci,id=ahci \
 	-drive if=none,id=work,format=raw,cache=unsafe,file="$w/work.img" -device ide-hd,drive=work,bus=ahci.0 \
-	-drive if=none,id=cd,media=cdrom,readonly=on,file="$w/tiny.iso" -device ide-cd,drive=cd,bus=ahci.1,bootindex=0
+	-drive if=none,id=pe,media=cdrom,readonly=on,file="$w/pe.iso" -device ide-cd,drive=pe,bus=ahci.1,bootindex=0 \
+	-drive if=none,id=payload,media=cdrom,readonly=on,file="$w/payload.iso" -device ide-cd,drive=payload,bus=ahci.2
 
 # Раздел NTFS начинается там, где его создал diskpart; копия без нулей занимает только данные.
-start=$(sfdisk -d "$w/work.img" 2>/dev/null | sed -n 's/.*start= *\([0-9]*\).*/\1/p' | head -1)
+start=$(sfdisk -d "$w/work.img" 2>/dev/null | sed -n 's/.*start= *\([0-9]*\).*/\1/p' | head -1 || true)
 [[ -n $start ]] || die "виртуальная машина не разметила рабочий диск: WinPE не дошёл до tiny.cmd"
 dd if="$w/work.img" of="$w/work.ntfs" bs=4M iflag=skip_bytes skip=$((start * 512)) conv=sparse status=none
 rm "$w/work.img"

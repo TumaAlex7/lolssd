@@ -30,10 +30,10 @@ Windows ставится на SSD из Linux через QEMU: SSD подключ
    например `~/lolssd-drivers`. Фирменные `.exe` обычно распаковываются: `7z x файл.exe`.
    Попадут в образ в `C:\Drivers`; при первой загрузке на компьютере их поставит задание
    `\lolssd\drivers`. У автора: Wi-Fi MediaTek MT7922 и AMD 680M со страницы ASUS M5506NA.
-4. Сборка (`make wsl` — пусковой WSL-дистрибутив и MSI WSL; нужен docker):
+4. Сборка (`make wsl` — пусковой WSL-дистрибутив на Debian и MSI WSL; без Docker и без sudo):
    ```
    cd ~/repos/lolssd
-   sudo systemctl start docker && sudo make wsl
+   make wsl
    make iso ISO=~/Downloads/Windows11_*.iso DRIVERS=~/lolssd-drivers
    ```
    Редакция — `EDITION="Windows 11 Pro"`, по умолчанию Home. Берите ту, что была на ноутбуке:

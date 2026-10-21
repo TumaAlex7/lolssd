@@ -25,7 +25,8 @@ Vanguard (античит Riot) работает на уровне ядра Windo
 
 ```
 make dist   # все бинарники и скрипты в dist/, разложенные так, как они ложатся на SSD
-make wsl    # + пусковой WSL-дистрибутив dist/wsl/lolssd.tar (нужен docker или podman)
+make wsl    # пусковой WSL-дистрибутив (Debian stable) и MSI WSL: без Docker и без root
+make iso ISO=Windows.iso [DRIVERS=папка с INF]   # установочный ISO со всем внутри
 make test
 ```
 
@@ -62,9 +63,13 @@ make test
 
 ### Пусковой WSL-дистрибутив (`dist/wsl/lolssd.tar`)
 
-Минимальный Arch (`archlinux:base` + `cryptsetup`, `lvm2`, `libxkbcommon`, `xkeyboard-config`) с
-`lolssd-wsl` в `/usr/local/bin/` и `wsl.conf` (systemd, root по умолчанию, `/mnt/c`). Импорт:
-`wsl --import lolssd C:\ProgramData\lolssd\wsl lolssd.tar`. Команды (от root):
+Debian stable (сейчас trixie): это «прибор» для `systemd-nspawn`, `cryptsetup`, `lvm2` и `xkbcli`,
+который не должен протухать, как rolling release. Собирается `build/wsl.sh` из официального
+корневого архива Debian (того, из которого делают их Docker-образы), пакеты ставит его же `apt`
+внутри `unshare --map-auto` — без Docker и root, на любом Linux. Внутри `lolssd-wsl` в
+`/usr/local/bin/` и `wsl.conf` (systemd, root по умолчанию, `/mnt/c`). В образ попадает через
+`make iso`, импортируется при первом входе. Ярлык «Linux terminal (SSD)» открывает именно его.
+Команды (от root):
 - `lolssd-wsl up` — поднять систему хоста по активному профилю. Сначала проверяет, что хост
   выключился чисто: не в гибернации, без незавершённого журнала ext4. Иначе отказ.
 - `lolssd-wsl run -- команда` — запустить программу хоста от вашего пользователя, с графикой
