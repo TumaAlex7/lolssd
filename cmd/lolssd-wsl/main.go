@@ -21,6 +21,9 @@ func main() {
 	if len(os.Args) < 2 {
 		usage()
 	}
+	// cryptsetup, vgchange и прочие лежат в /usr/sbin, а PATH наследуется от того, кто запустил
+	// (wsl.exe, ярлык): не полагаемся на него.
+	os.Setenv("PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:"+os.Getenv("PATH"))
 	if os.Geteuid() != 0 {
 		fmt.Fprintln(os.Stderr, "нужны права root: wsl.exe -d lolssd -u root -- lolssd-wsl ...")
 		os.Exit(1)
