@@ -71,11 +71,19 @@ func runHyprland(p hostprofile.Profile, wins []hostprofile.WinMonitor, n int, cf
 	}
 
 	// Рисует d3d12 через /dev/dxg, а если Hyprland с ним сразу падает — llvmpipe на CPU.
-	// d3d12 в контейнере ищет драйвер видеокарты по жёсткому пути /usr/lib/wsl/drivers, которого
-	// в системе хоста нет (docs/ARCHITECTURE.md §6, «Как композитор работает без экрана»).
 	drivers := []string{"GALLIUM_DRIVER=llvmpipe"}
 	if _, err := os.Stat("/dev/dxg"); err == nil {
-		drivers = append([]string{"GALLIUM_DRIVER=d3d12"}, drivers...)
+		// d3d12 (libdxcore) ищет драйвер видеокарты Windows по жёсткому пути /usr/lib/wsl/drivers,
+		// поэтому /usr/lib/wsl подключается по тому же пути — только в этом режиме, графика есть
+		// только у рабочего стола. Точка подключения — пустой каталог на диске хоста: создаётся
+		// один раз и остаётся навсегда (docs/ARCHITECTURE.md §2). Подключение только для чтения,
+		// в каталог ничего не пишется, а при аварии оно исчезает вместе с ядром WSL.
+		if err := os.MkdirAll(filepath.Join(rootDir, "usr/lib/wsl"), 0o755); err == nil {
+			extra = append(extra, "--bind-ro=/usr/lib/wsl:/usr/lib/wsl")
+			drivers = append([]string{"GALLIUM_DRIVER=d3d12"}, drivers...)
+		} else {
+			fmt.Fprintln(os.Stderr, "нет /usr/lib/wsl в системе хоста, рисую на CPU:", err)
+		}
 	}
 	code := 1
 	for i, driver := range drivers {
