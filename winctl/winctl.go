@@ -19,7 +19,7 @@ func VNCPort(i int) int { return 5901 + i }
 func ViewerArgs(m hostprofile.WinMonitor, i int) []string {
 	return []string{
 		"-FullScreen=1", "-FullScreenMode=Current", "-RemoteResize=0",
-		"-SecurityTypes=None", "-AlertOnFatalError=0",
+		"-SecurityTypes=None", "-AlertOnFatalError=0", "-Log=*:stderr:30",
 		fmt.Sprintf("-geometry=640x480+%d+%d", m.X+m.Width/4, m.Y+m.Height/4),
 		fmt.Sprintf("127.0.0.1::%d", VNCPort(i)),
 	}

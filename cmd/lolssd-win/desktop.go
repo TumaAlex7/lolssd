@@ -82,7 +82,7 @@ func desktop() int {
 
 	// Вывод сеанса — и в консоль, и в session.log рядом с журналом (читается и из Linux).
 	// При ошибке консоль ждёт Enter.
-	script := `cd /mnt/c/ProgramData/lolssd && for f in session.log hyprland-*.log crash-*.txt wayvnc-*.log; do [ -f "$f" ] && mv -f "$f" "prev-$f"; done
+	script := `cd /mnt/c/ProgramData/lolssd && for f in session.log hyprland-*.log crash-*.txt wayvnc-*.log vncviewer-*.log; do [ -f "$f" ] && mv -f "$f" "prev-$f"; done
 { /usr/local/bin/lolssd-wsl session; echo $? >/run/lolssd-rc; } 2>&1 | tee /mnt/c/ProgramData/lolssd/session.log
 rc=$(cat /run/lolssd-rc); [ "$rc" = 0 ] || { echo; echo "Ошибка (код $rc), вывод в C:\\ProgramData\\lolssd\\session.log. Enter — закрыть"; read x; }`
 	os.Setenv("LOLSSD_MONITORS", string(monsJSON))
@@ -107,6 +107,13 @@ rc=$(cat /run/lolssd-rc); [ "$rc" = 0 ] || { echo; echo "Ошибка (код $r
 	exited := make(chan int, len(mons))
 	open := func(i int) {
 		c := exec.Command(viewer, winctl.ViewerArgs(mons[i], i)...)
+		// Журнал просмотрщика: выбранное кодирование, оценка скорости канала и смены качества
+		// JPEG по замеренной пропускной способности. У оконной программы stderr иначе никуда не идёт.
+		if f, err := os.OpenFile(filepath.Join(os.Getenv("ProgramData"), "lolssd", fmt.Sprintf("vncviewer-%d.log", i+1)),
+			os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644); err == nil {
+			c.Stdout, c.Stderr = f, f
+			defer f.Close()
+		}
 		if err := c.Start(); err != nil {
 			log.Println("vncviewer:", err)
 			return
