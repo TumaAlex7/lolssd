@@ -7,10 +7,18 @@
  * wlr-screencopy, а отдельный захват курсора без них не включается (курсор рисует Hyprland
  * в самой картинке, wayvnc --render-cursor).
  *
+ * Курсор Hyprland рисует в картинке, а изображение курсора wayvnc без отдельного захвата не
+ * присылает. Тогда TigerVNC под Windows рисует поверх стрелку Windows — курсоров два. Поэтому
+ * wayvnc всегда передаёт просмотрщику курсор из одного непрозрачного чёрного пикселя с остриём
+ * в нём (полностью прозрачный Windows рисует чёрным квадратом): он совпадает с остриём курсора
+ * Hyprland, и виден только курсор Linux. Приём — из hyprland-wsl (src/no-cursor-image.c).
+ *
  * wl_registry_add_listener — inline-обёртка над wl_proxy_add_listener из libwayland-client,
- * её и перехватываем. Собирается без заголовков Wayland: нужные типы объявлены здесь. */
+ * её и перехватываем. Собирается без заголовков Wayland и neatvnc: нужные типы объявлены здесь,
+ * API neatvnc — 0.9 (wayvnc 0.9 требует >=0.9, <0.10). */
 #define _GNU_SOURCE
 #include <dlfcn.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -47,4 +55,41 @@ int wl_proxy_add_listener(struct wl_proxy *proxy, void (**implementation)(void),
 		implementation = (void (**)(void))&filtered;
 	}
 	return real(proxy, implementation, data);
+}
+
+/* neatvnc 0.9 */
+struct nvnc;
+struct nvnc_fb;
+#define FOURCC_ARGB8888 0x34325241u /* AR24 */
+
+static void set_dot(struct nvnc *server) {
+	static void (*real)(struct nvnc *, struct nvnc_fb *, uint16_t, uint16_t, uint16_t, uint16_t, bool);
+	static struct nvnc_fb *dot;
+	if (!real)
+		real = (void (*)(struct nvnc *, struct nvnc_fb *, uint16_t, uint16_t, uint16_t, uint16_t, bool))dlsym(RTLD_NEXT, "nvnc_set_cursor");
+	if (!dot) {
+		struct nvnc_fb *(*fb_new)(uint16_t, uint16_t, uint32_t, uint16_t) =
+		    (struct nvnc_fb * (*)(uint16_t, uint16_t, uint32_t, uint16_t)) dlsym(RTLD_DEFAULT, "nvnc_fb_new");
+		void *(*fb_addr)(const struct nvnc_fb *) = (void *(*)(const struct nvnc_fb *))dlsym(RTLD_DEFAULT, "nvnc_fb_get_addr");
+		if (fb_new && fb_addr && (dot = fb_new(1, 1, FOURCC_ARGB8888, 1)))
+			*(uint32_t *)fb_addr(dot) = 0xff000000u;
+	}
+	if (real && dot && server)
+		real(server, dot, 1, 1, 0, 0, true);
+}
+
+/* Любое изображение курсора от wayvnc (в том числе «нет курсора» при отключении клиента)
+ * заменяется точкой. */
+void nvnc_set_cursor(struct nvnc *server, struct nvnc_fb *fb, uint16_t width, uint16_t height, uint16_t hx, uint16_t hy, bool damaged) {
+	(void)fb, (void)width, (void)height, (void)hx, (void)hy, (void)damaged;
+	set_dot(server);
+}
+
+struct nvnc *nvnc_open(const char *address, uint16_t port) {
+	static struct nvnc *(*real)(const char *, uint16_t);
+	if (!real)
+		real = (struct nvnc * (*)(const char *, uint16_t)) dlsym(RTLD_NEXT, "nvnc_open");
+	struct nvnc *server = real(address, port);
+	set_dot(server);
+	return server;
 }
