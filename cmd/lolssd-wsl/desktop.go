@@ -116,7 +116,13 @@ func runHyprland(p hostprofile.Profile, wins []hostprofile.WinMonitor, n int, cf
 		if _, err := os.Stat(filepath.Join(rootDir, "usr/bin/stdbuf")); err == nil {
 			cmd = append(cmd, "stdbuf", "-oL", "-eL")
 		}
-		cmd = append(cmd, "Hyprland", "--config", cfg)
+		// Через start-hyprland, как задумано в Hyprland ≥ 0.53 (иначе он предупреждает в углу
+		// экрана): сторожевой процесс, который следит за Hyprland. Код выхода его же.
+		if _, err := os.Stat(filepath.Join(rootDir, "usr/bin/start-hyprland")); err == nil {
+			cmd = append(cmd, "start-hyprland", "--", "--config", cfg)
+		} else {
+			cmd = append(cmd, "Hyprland", "--config", cfg)
+		}
 		name := strings.TrimPrefix(driver, "GALLIUM_DRIVER=")
 
 		stop := make(chan struct{})
