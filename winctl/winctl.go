@@ -19,6 +19,9 @@ func VNCPort(i int) int { return 5901 + i }
 func ViewerArgs(m hostprofile.WinMonitor, i int) []string {
 	return []string{
 		"-FullScreen=1", "-FullScreenMode=Current", "-RemoteResize=0",
+		// Канал локальный: без автоподбора и JPEG — Tight без потерь, полный цвет, слабый zlib
+		// (меньше работы процессору на обеих сторонах).
+		"-AutoSelect=0", "-PreferredEncoding=Tight", "-NoJPEG=1", "-FullColor=1", "-CompressLevel=1",
 		"-SecurityTypes=None", "-AlertOnFatalError=0", "-Log=*:stderr:30",
 		fmt.Sprintf("-geometry=640x480+%d+%d", m.X+m.Width/4, m.Y+m.Height/4),
 		fmt.Sprintf("127.0.0.1::%d", VNCPort(i)),

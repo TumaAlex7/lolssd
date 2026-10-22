@@ -45,8 +45,22 @@ func writeWSLConfig() error {
 		return nil
 	}
 	mem := max(totalMemoryMiB()/2/1024, 4)
-	cfg := fmt.Sprintf("%s\r\n[wsl2]\r\nmemory=%dGB\r\nswap=4GB\r\nguiApplications=true\r\n\r\n[experimental]\r\nautoMemoryReclaim=gradual\r\n", wslConfigMark, mem)
-	return os.WriteFile(path, []byte(cfg), 0o644)
+	// networkingMode=mirrored: WSL делит сеть с Windows, и 127.0.0.1 у них общий. В режиме NAT
+	// по умолчанию до Windows доходит только пересылка портов (wslrelay), а через неё VNC
+	// рабочего стола получал около 16–19 Мбит/с и уходил в JPEG.
+	cfg := fmt.Sprintf("%s\r\n[wsl2]\r\nmemory=%dGB\r\nswap=4GB\r\nguiApplications=true\r\nnetworkingMode=mirrored\r\n\r\n[experimental]\r\nautoMemoryReclaim=gradual\r\n", wslConfigMark, mem)
+	if b, err := os.ReadFile(path); err == nil && string(b) == cfg {
+		return nil
+	}
+	if err := os.WriteFile(path, []byte(cfg), 0o644); err != nil {
+		return err
+	}
+	// ВМ WSL могла уже стартовать (импорт дистрибутива): новые настройки — только после перезапуска.
+	if out, err := hidden(time.Minute, "wsl.exe", "--shutdown").CombinedOutput(); err != nil {
+		log.Printf("wsl --shutdown: %v %s", err, out)
+	}
+	log.Println(".wslconfig обновлён")
+	return nil
 }
 
 // mountHost готовит режим «Linux внутри Windows» (docs/ARCHITECTURE.md §6):
