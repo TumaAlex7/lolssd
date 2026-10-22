@@ -319,10 +319,14 @@ func serveVNC(n int, stop chan struct{}) {
 			// Выходы 2…n создаются обёрткой конфига при старте; пока выхода нет, wayvnc
 			// завершится — пробуем снова на следующем круге. У каждого свой управляющий сокет:
 			// общий по умолчанию (wayvncctl) второй экземпляр не откроет.
-			c := exec.Command("wayvnc", "--output=HEADLESS-"+strconv.Itoa(i+1), "--max-fps=60",
+			// Курсор Hyprland рисует в самой картинке (--render-cursor): отдельный захват курсора
+			// в wayvnc 0.9 при сбое завершает его целиком, его отключает wayvnc-wlr-only.so
+			// (build/hypr/wayvnc-wlr-only.c).
+			c := exec.Command("wayvnc", "--output=HEADLESS-"+strconv.Itoa(i+1), "--max-fps=60", "--render-cursor",
 				"--socket="+filepath.Join(xdgDir, "wayvncctl-"+strconv.Itoa(i+1)),
 				"127.0.0.1", strconv.Itoa(vncPort0+i+1))
-			c.Env = append(os.Environ(), "XDG_RUNTIME_DIR="+xdgDir, "WAYLAND_DISPLAY="+socket)
+			c.Env = append(os.Environ(), "XDG_RUNTIME_DIR="+xdgDir, "WAYLAND_DISPLAY="+socket,
+				"LD_PRELOAD=/usr/local/lib/lolssd/wayvnc-wlr-only.so")
 			f, _ := os.OpenFile(fmt.Sprintf("%swayvnc-%d.log", logDir, i+1), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 			if f != nil {
 				c.Stdout, c.Stderr = f, f
