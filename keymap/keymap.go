@@ -1,10 +1,12 @@
 // Package keymap переводит переназначения клавиш хоста (keyd) в то, что работает в режиме
 // «Linux внутри Windows» (docs/ARCHITECTURE.md §7). Цепочка там такая: Windows (Scancode Map)
-// → WSLg (скан-коды как есть) → Hyprland (своя раскладка XKB и обёртка конфига).
+// → полноэкранный TigerVNC (забирает всю клавиатуру, включая Win, и шлёт keysym) → wayvnc →
+// Hyprland (обёртка конфига).
 //
 // Что куда:
-//   - транспорт Meta: левая/правая Win → F13/F14. Иначе Windows перехватывает Win, и до Linux
-//     она не доходит. В Hyprland F13/F14 снова становятся Super_L/Super_R;
+//   - Win остаётся Win: полноэкранный TigerVNC сам передаёт её как Super, а в Windows она
+//     работает как обычно (раньше, для окон WSLg, Win уводилась в F13/F14 — это ломало и Super
+//     в Linux через VNC, и Win-сочетания в Windows);
 //   - переназначения 1:1 (`capslock = esc`) → Scancode Map: действуют и в игре, и в Linux;
 //   - сочетания (`f23+leftshift+leftmeta = rightmeta`, так прошивки шлют клавишу Copilot) →
 //     обёртка Hyprland: пока зажата «главная» клавиша сочетания, считается зажатой цель;
@@ -32,8 +34,7 @@ var keys = map[string]Key{
 	"leftshift": {0x2a, "LFSH", "Shift_L", "SHIFT"}, "rightshift": {0x36, "RTSH", "Shift_R", "SHIFT"},
 	"leftcontrol": {0x1d, "LCTL", "Control_L", "CTRL"}, "rightcontrol": {0xe01d, "RCTL", "Control_R", "CTRL"},
 	"leftalt": {0x38, "LALT", "Alt_L", "ALT"}, "rightalt": {0xe038, "RALT", "Alt_R", "ALT"},
-	// Meta приходит в Linux как F13/F14 (транспорт), см. Plan.
-	"leftmeta": {0xe05b, "FK13", "Super_L", "SUPER"}, "rightmeta": {0xe05c, "FK14", "Super_R", "SUPER"},
+	"leftmeta": {0xe05b, "LWIN", "Super_L", "SUPER"}, "rightmeta": {0xe05c, "RWIN", "Super_R", "SUPER"},
 	"compose": {0xe05d, "MENU", "Menu", ""},
 	"esc":     {0x01, "ESC", "Escape", ""}, "capslock": {0x3a, "CAPS", "Caps_Lock", ""},
 	"tab": {0x0f, "TAB", "Tab", ""}, "enter": {0x1c, "RTRN", "Return", ""},
@@ -63,8 +64,9 @@ func init() {
 	}
 }
 
-// Транспорт Meta: что Windows отдаёт вместо Win.
-var transport = map[string]string{"leftmeta": "f13", "rightmeta": "f14"}
+// Транспорт Meta: что Windows отдаёт вместо Win. Пуст: через полноэкранный TigerVNC Win доходит
+// до Linux сама (см. описание пакета). Механизм оставлен на случай другого способа показа.
+var transport = map[string]string{}
 
 // Rule — строка [main] одного файла keyd.
 type Rule struct {

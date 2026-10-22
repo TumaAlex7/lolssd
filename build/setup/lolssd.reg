@@ -149,12 +149,8 @@ Windows Registry Editor Version 5.00
 
 ; ---------------------------------------------------------------- keyboard
 
-; Left/right Win → F13/F14 (Meta transport, docs/ARCHITECTURE.md §7): Windows stops grabbing
-; them (no Start menu in the middle of a game; Start stays on Ctrl+Esc) and they reach Linux,
-; where Hyprland turns them back into Super_L/Super_R. lolssd-win mount rewrites this value
-; with the profile's keyd remaps on top. Takes effect after a reboot.
-[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Keyboard Layout]
-"Scancode Map"=hex:00,00,00,00,00,00,00,00,03,00,00,00,64,00,5b,e0,65,00,5c,e0,00,00,00,00
+; No Scancode Map by default: Win stays Win. Full-screen TigerVNC passes it to Linux as Super
+; (docs/ARCHITECTURE.md §7). lolssd-win mount writes the profile's 1:1 keyd remaps here.
 
 ; ---------------------------------------------------------------- last on purpose
 

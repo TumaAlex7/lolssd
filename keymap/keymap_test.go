@@ -27,9 +27,10 @@ func authorPlan(t *testing.T) Plan {
 func TestAuthorPlan(t *testing.T) {
 	p := authorPlan(t)
 	want := map[uint16]uint16{
-		0xe05b: 0x64, // левая Win → F13
-		0xe05c: 0x65, // правая Win → F14
-		0xe05d: 0x65, // Compose (Menu на PC) → правая Meta, то есть F14
+		0xe05d: 0xe05c, // Compose (Menu на PC) → правая Meta, то есть правая Win
+	}
+	if _, ok := p.Scancodes[0xe05b]; ok {
+		t.Fatal("Win переназначена, а должна остаться Win:", p.Scancodes)
 	}
 	for from, to := range want {
 		if p.Scancodes[from] != to {
@@ -44,7 +45,7 @@ func TestAuthorPlan(t *testing.T) {
 		strings.Join(c.Mods, ",") != "SHIFT,SUPER" || len(c.Hide) != 2 {
 		t.Fatalf("%+v", c)
 	}
-	if p.XKB["FK13"] != "Super_L" || p.XKB["FK14"] != "Super_R" || p.XKB["FK23"] != "F23" {
+	if p.XKB["FK23"] != "F23" {
 		t.Fatal(p.XKB)
 	}
 	// «menu» (KEY_MENU) в Windows нет, а конфликт Compose из laptop.conf решён в пользу «*».
@@ -62,7 +63,7 @@ func TestScancodeMap(t *testing.T) {
 	}
 }
 
-// Раскладка с дописанными клавишами компилируется, F13/F14 — модификатор Super.
+// Раскладка с дописанными клавишами компилируется, F23 становится простой клавишей.
 func TestPatchXKB(t *testing.T) {
 	if _, err := exec.LookPath("xkbcli"); err != nil {
 		t.Skip("нет xkbcli")
@@ -77,17 +78,6 @@ func TestPatchXKB(t *testing.T) {
 	}
 	f := filepath.Join(t.TempDir(), "k.xkb")
 	os.WriteFile(f, []byte(patched), 0o644)
-	mm, err := exec.Command("xkbcli", "compile-keymap", "--from-xkb", f, "--modmaps").CombinedOutput()
-	if err != nil {
-		t.Fatal(err, string(mm))
-	}
-	s := string(mm)
-	for _, k := range []string{"FK13", "FK14"} {
-		i := strings.Index(s, "  "+k+":")
-		if i < 0 || !strings.Contains(s[i:i+60], "Mod4") {
-			t.Fatalf("%s не модификатор Super:\n%s", k, s[max(i, 0):max(i, 0)+60])
-		}
-	}
 	km, _ := exec.Command("xkbcli", "compile-keymap", "--from-xkb", f).Output()
 	block := string(km)[strings.Index(string(km), "key <FK23>"):]
 	block = block[:strings.Index(block, "};")]

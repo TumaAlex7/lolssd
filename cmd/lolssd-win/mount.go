@@ -183,14 +183,28 @@ func applyScancodeMap(p hostprofile.Profile) bool {
 	for _, n := range plan.Notes {
 		log.Println("клавиши, не переносится:", n)
 	}
-	want := keymap.ScancodeMap(plan.Scancodes)
 	k, _, err := registry.CreateKey(registry.LOCAL_MACHINE, `SYSTEM\CurrentControlSet\Control\Keyboard Layout`, registry.QUERY_VALUE|registry.SET_VALUE)
 	if err != nil {
 		log.Println("Scancode Map:", err)
 		return false
 	}
 	defer k.Close()
-	if cur, _, _ := k.GetBinaryValue("Scancode Map"); bytes.Equal(cur, want) {
+	cur, _, curErr := k.GetBinaryValue("Scancode Map")
+	if len(plan.Scancodes) == 0 {
+		// Переназначать нечего: значения быть не должно (в том числе старого транспорта
+		// Win → F13/F14 у систем, установленных до перехода на TigerVNC).
+		if curErr != nil {
+			return false
+		}
+		if err := k.DeleteValue("Scancode Map"); err != nil {
+			log.Println("Scancode Map:", err)
+			return false
+		}
+		log.Println("Scancode Map удалён, нужна перезагрузка")
+		return true
+	}
+	want := keymap.ScancodeMap(plan.Scancodes)
+	if bytes.Equal(cur, want) {
 		return false
 	}
 	if err := k.SetBinaryValue("Scancode Map", want); err != nil {

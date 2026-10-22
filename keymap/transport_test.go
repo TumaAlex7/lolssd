@@ -1,24 +1,22 @@
 package keymap
 
 import (
-	"fmt"
 	"os"
 	"strings"
 	"testing"
 )
 
-// Значение Scancode Map в lolssd.reg должно совпадать с транспортом Meta без профиля:
-// иначе lolssd-win mount и образ разойдутся во мнении, что действует.
-func TestRegTransport(t *testing.T) {
+// Без профиля переназначений нет, и в lolssd.reg Scancode Map быть не должно: иначе
+// lolssd-win mount (который тогда значение удаляет) и образ разойдутся во мнении, что действует.
+func TestRegNoScancodeMap(t *testing.T) {
 	b, err := os.ReadFile("../build/setup/lolssd.reg")
 	if err != nil {
 		t.Fatal(err)
 	}
-	var hex []string
-	for _, x := range ScancodeMap(Build(nil, nil).Scancodes) {
-		hex = append(hex, fmt.Sprintf("%02x", x))
+	if n := len(Build(nil, nil).Scancodes); n != 0 {
+		t.Fatalf("без профиля %d переназначений", n)
 	}
-	if want := `"Scancode Map"=hex:` + strings.Join(hex, ","); !strings.Contains(string(b), want) {
-		t.Fatalf("в lolssd.reg нет\n%s", want)
+	if strings.Contains(string(b), `"Scancode Map"=`) {
+		t.Fatal("в lolssd.reg задан Scancode Map")
 	}
 }
