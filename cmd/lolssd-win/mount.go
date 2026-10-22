@@ -288,8 +288,9 @@ func ensureDistro() {
 	log.Println("пусковой дистрибутив lolssd импортирован")
 }
 
-// fixShortcuts переводит ярлык рабочего стола Linux на lolssd-win desktop у систем, установленных
-// до него (там ярлык вёл прямо в wsl.exe). Ярлыки создаёт lolssd-setup.ps1; здесь только правка.
+// fixShortcuts доводит ярлыки систем, установленных раньше, до текущих: ярлык рабочего стола Linux
+// ведёт в lolssd-win desktop (раньше — прямо в wsl.exe), есть задание и ярлык перезагрузки в
+// эту Windows. Новые системы получают всё это от lolssd-setup.ps1.
 func fixShortcuts() {
 	exe := filepath.Join(os.Getenv("ProgramFiles"), "lolssd", "lolssd-win.exe")
 	script := `$exe = '` + exe + `'
@@ -302,6 +303,22 @@ foreach ($d in "$env:PUBLIC\Desktop", "$env:ProgramData\Microsoft\Windows\Start 
   $l.TargetPath = $exe; $l.Arguments = 'desktop'
   $l.Description = "The host's Hyprland, full screen on every monitor"
   $l.Save(); "fixed $p"
+}
+# Перезагрузка обратно в эту Windows (lolssd-setup.ps1, 'register restart task'):
+# задание и ярлык в «Пуске», если система установлена до них.
+if (-not (Get-ScheduledTask -TaskPath '\lolssd\' -TaskName 'restart' -ErrorAction SilentlyContinue)) {
+  $a = New-ScheduledTaskAction -Execute $exe -Argument 'restart'
+  $pr = New-ScheduledTaskPrincipal -GroupId 'BUILTIN\Administrators' -RunLevel Highest
+  Register-ScheduledTask -TaskPath '\lolssd\' -TaskName 'restart' -Action $a -Principal $pr -Force | Out-Null
+  "registered task \lolssd\restart"
+}
+$p = "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Restart into Windows (SSD).lnk"
+if (-not (Test-Path $p)) {
+  $l = $s.CreateShortcut($p)
+  $l.TargetPath = "$env:SystemRoot\System32\schtasks.exe"; $l.Arguments = '/run /tn \lolssd\restart'
+  $l.Description = 'Restart straight back into this Windows instead of the host system'
+  $l.IconLocation = "$env:SystemRoot\System32\shell32.dll,238"; $l.WindowStyle = 7
+  $l.Save(); "created $p"
 }`
 	out, err := hidden(time.Minute, "powershell.exe", "-NoProfile", "-NonInteractive", "-Command",
 		script).CombinedOutput()

@@ -107,6 +107,23 @@ Step 'register driver install task' {
     Register-ScheduledTask -TaskPath '\lolssd\' -TaskName 'drivers' -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null
 }
 
+# "Restart into Windows (SSD)": a plain restart boots the host's own system, because
+# nvram-guard keeps this SSD out of BootOrder. The task sets BootNext to the SSD and restarts;
+# it runs elevated without a UAC prompt, the Start menu shortcut only starts the task.
+Step 'register restart task' {
+    $exe = "$env:ProgramFiles\lolssd\lolssd-win.exe"
+    $action = New-ScheduledTaskAction -Execute $exe -Argument 'restart'
+    $principal = New-ScheduledTaskPrincipal -GroupId 'BUILTIN\Administrators' -RunLevel Highest
+    Register-ScheduledTask -TaskPath '\lolssd\' -TaskName 'restart' -Action $action -Principal $principal -Force | Out-Null
+    $lnk = (New-Object -ComObject WScript.Shell).CreateShortcut("$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Restart into Windows (SSD).lnk")
+    $lnk.TargetPath = "$env:SystemRoot\System32\schtasks.exe"
+    $lnk.Arguments = '/run /tn \lolssd\restart'
+    $lnk.Description = 'Restart straight back into this Windows instead of the host system'
+    $lnk.IconLocation = "$env:SystemRoot\System32\shell32.dll,238"
+    $lnk.WindowStyle = 7
+    $lnk.Save()
+}
+
 # Desktop shortcut that starts the host's desktop (asks for the LUKS password if any).
 # Start menu folder and desktop. The launcher distro is imported at the first logon after
 # a reboot (lolssd-win mount); the host entries need a profile (lolssd profile on the host).

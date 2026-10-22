@@ -38,12 +38,14 @@ func main() {
 		os.Exit(mountHost())
 	case "desktop":
 		os.Exit(desktop())
+	case "restart":
+		os.Exit(restartSelf())
 	default:
 		usage()
 	}
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: lolssd-win nvram-guard | mount | desktop")
+	fmt.Fprintln(os.Stderr, "usage: lolssd-win nvram-guard | mount | desktop | restart")
 	os.Exit(2)
 }
