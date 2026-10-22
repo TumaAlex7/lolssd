@@ -144,7 +144,9 @@ rc=$(cat /run/lolssd-rc); [ "$rc" = 0 ] || { echo; echo "Ошибка (код $r
 				case i := <-exited:
 					// Закрыли сами — монитор отдан Windows. Вылетел сразу после запуска — wayvnc
 					// ещё не принимал, откроем снова.
-					if time.Since(started[i]) > 3*time.Second {
+					// Сервер в этот момент не отвечает — значит, упал wayvnc, а не закрыл пользователь:
+					// откроем снова, когда сеанс его перезапустит.
+					if time.Since(started[i]) > 3*time.Second && listening(winctl.VNCPort(i)) {
 						given[i] = true
 						log.Printf("монитор %d отдан Windows", i+1)
 					}
