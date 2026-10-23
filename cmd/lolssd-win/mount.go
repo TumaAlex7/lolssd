@@ -320,11 +320,15 @@ foreach ($d in "$env:PUBLIC\Desktop", "$env:ProgramData\Microsoft\Windows\Start 
 }
 # Перезагрузка обратно в эту Windows (lolssd-setup.ps1, 'register restart task'):
 # задание и ярлык в «Пуске», если система установлена до них.
-if (-not (Get-ScheduledTask -TaskPath '\lolssd\' -TaskName 'restart' -ErrorAction SilentlyContinue)) {
+# Задание — на самого пользователя (Interactive, Highest): такое он запускает через
+# schtasks /run без запроса UAC. На группу «Администраторы» запуск из обычного сеанса не проходил.
+$me = "$env:USERDOMAIN\$env:USERNAME"
+$t = Get-ScheduledTask -TaskPath '\lolssd\' -TaskName 'restart' -ErrorAction SilentlyContinue
+if (-not $t -or $t.Principal.UserId -ne $env:USERNAME) {
   $a = New-ScheduledTaskAction -Execute $exe -Argument 'restart'
-  $pr = New-ScheduledTaskPrincipal -GroupId 'BUILTIN\Administrators' -RunLevel Highest
+  $pr = New-ScheduledTaskPrincipal -UserId $me -LogonType Interactive -RunLevel Highest
   Register-ScheduledTask -TaskPath '\lolssd\' -TaskName 'restart' -Action $a -Principal $pr -Force | Out-Null
-  "registered task \lolssd\restart"
+  "registered task \lolssd\restart for $me"
 }
 $p = "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Restart into Windows (SSD).lnk"
 if (-not (Test-Path $p)) {
