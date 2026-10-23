@@ -40,11 +40,11 @@ func logon() int {
 		return 0
 	}
 	log.Printf("профиль %s (%s, %s)", p.MachineID, p.Distro.ID, p.User.Name)
-	if applyScancodeMap() {
+	if applyScancodeMap(p) {
 		const mbOK, mbIconInfo, mbSetForeground = 0x0, 0x40, 0x10000
 		procMessageBox.Call(0, uintptr(unsafe.Pointer(windows.StringToUTF16Ptr(
-			"Клавиша Copilot переназначена для Linux (F23 → F24).\n"+
-				"Это начнёт действовать после перезагрузки Windows."))),
+			"Переназначения клавиш для Linux записаны (из keyd и F23 → F24 для клавиши Copilot).\n"+
+				"Они начнут действовать после перезагрузки Windows."))),
 			uintptr(unsafe.Pointer(windows.StringToUTF16Ptr("lolssd"))), mbOK|mbIconInfo|mbSetForeground)
 	}
 	return 0
@@ -164,16 +164,24 @@ func removeWSL() {
 
 var procMessageBox = user32.NewProc("MessageBoxW")
 
-// vmScancodes — Scancode Map Windows для ВМ: клавиши в ней переназначает keyd самой системы
-// хоста, как на железе, поэтому из её правил в Windows ничего не переносится. Остаётся только
-// перевозка F23 (0x6E): PS/2-клавиатура QEMU не умеет F16–F23, и клавиша Copilot (Win+Shift+F23)
-// доходила бы без F23. Windows шлёт её как F24 (0x76), а в ВМ правило udev (winctl.VMUdevRules)
-// возвращает этому скан-коду F23 — и keyd получает тот же аккорд, что на железе.
-var vmScancodes = map[uint16]uint16{0x006e: 0x0076}
+// f23Transport — перевозка F23 в ВМ: PS/2-клавиатура QEMU не умеет F16–F23, и клавиша Copilot
+// (Win+Shift+F23) доходила бы без F23. Windows шлёт её как F24 (0x76), а в ВМ правило udev
+// (winctl.VMUdevRules) возвращает этому скан-коду F23 — keyd получает тот же аккорд, что на железе.
+var f23Transport = map[uint16]uint16{0x006e: 0x0076}
 
-// applyScancodeMap приводит Scancode Map к vmScancodes. Драйвер клавиатуры читает его при
-// загрузке, поэтому при изменении нужна перезагрузка — тогда возвращает true.
-func applyScancodeMap() bool {
+// applyScancodeMap записывает в Scancode Map переназначения keyd из профиля и f23Transport.
+// В ВМ весь ввод из Windows приходит одной клавиатурой 0001:0001, и keyd применяет к нему правила
+// встроенной клавиатуры ноутбука; правила остальных клавиатур (например, Menu → правая Super из
+// default.conf) поэтому делает Windows, как раньше (docs/ARCHITECTURE.md §7). Драйвер клавиатуры
+// читает Scancode Map при загрузке: при изменении нужна перезагрузка — тогда возвращает true.
+func applyScancodeMap(p hostprofile.Profile) bool {
+	plan := keymap.Build(keymap.ParseKeyd(p.Keyboard.Keyd))
+	for _, n := range plan.Notes {
+		log.Println("клавиши, не переносится:", n)
+	}
+	for from, to := range f23Transport {
+		plan.Scancodes[from] = to
+	}
 	k, _, err := registry.CreateKey(registry.LOCAL_MACHINE, `SYSTEM\CurrentControlSet\Control\Keyboard Layout`, registry.QUERY_VALUE|registry.SET_VALUE)
 	if err != nil {
 		log.Println("Scancode Map:", err)
@@ -181,7 +189,7 @@ func applyScancodeMap() bool {
 	}
 	defer k.Close()
 	cur, _, _ := k.GetBinaryValue("Scancode Map")
-	want := keymap.ScancodeMap(vmScancodes)
+	want := keymap.ScancodeMap(plan.Scancodes)
 	if bytes.Equal(cur, want) {
 		return false
 	}
@@ -189,7 +197,7 @@ func applyScancodeMap() bool {
 		log.Println("Scancode Map:", err)
 		return false
 	}
-	log.Println("Scancode Map: F23 → F24 для ВМ, нужна перезагрузка")
+	log.Printf("Scancode Map обновлён (%d переназначений), нужна перезагрузка", len(plan.Scancodes))
 	return true
 }
 
