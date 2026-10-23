@@ -10,14 +10,13 @@ import (
 	"lolssd/hostprofile"
 )
 
-// Драйверы Hyper-V для initramfs ВМ: шина, диск, сеть, служебные, сокеты, экран, клавиатура и мышь.
-var hypervModules = []string{"hv_vmbus", "hv_storvsc", "hv_netvsc", "hv_utils", "hv_sock",
-	"hyperv_drm", "hyperv_keyboard", "hid_hyperv"}
+// Диски ВМ — NVMe (QEMU): драйвер в initramfs нужен, даже если autodetect на этом железе его не взял.
+var vmModules = []string{"nvme"}
 
-// buildVMImage собирает образ загрузки системы хоста в ВМ Hyper-V — UKI на разделе LOLSSD, — её же
-// mkinitcpio и ядром. В системе ничего не меняется: свой конфиг mkinitcpio (конфиг системы плюс
-// драйверы Hyper-V; autodetect оставлен — остальное как у этого железа) и своя командная строка:
-//   - корень по UUID: в ВМ диск — не nvme0n1, а sda (hv_storvsc);
+// buildVMImage собирает образ загрузки системы хоста в ВМ (QEMU в Windows) — UKI на разделе
+// LOLSSD, — её же mkinitcpio и ядром. В системе ничего не меняется: свой конфиг mkinitcpio
+// (конфиг системы плюс vmModules; autodetect оставлен) и своя командная строка:
+//   - корень по UUID: имена дисков в ВМ другие;
 //   - остальное — из текущей командной строки (LUKS, resume и т. п.), кроме initrd= и root=;
 //   - консоль ещё и на ttyS0: COM-порт ВМ читается из Windows, это журнал загрузки без экрана.
 func buildVMImage(dir string) (*hostprofile.VMImage, error) {
@@ -55,7 +54,7 @@ func buildVMImage(dir string) (*hostprofile.VMImage, error) {
 	}
 	defer os.RemoveAll(tmp)
 	conf := filepath.Join(tmp, "mkinitcpio.conf")
-	confText := ". /etc/mkinitcpio.conf\nMODULES+=(" + strings.Join(hypervModules, " ") + ")\n"
+	confText := ". /etc/mkinitcpio.conf\nMODULES+=(" + strings.Join(vmModules, " ") + ")\n"
 	cmdFile := filepath.Join(tmp, "cmdline")
 	if err := os.WriteFile(conf, []byte(confText), 0o644); err != nil {
 		return nil, err
@@ -69,7 +68,7 @@ func buildVMImage(dir string) (*hostprofile.VMImage, error) {
 	if err := os.MkdirAll(filepath.Dir(out), 0o755); err != nil {
 		return nil, err
 	}
-	fmt.Println("Собираю образ загрузки для ВМ Hyper-V (ядро", kernel+")…")
+	fmt.Println("Собираю образ загрузки для ВМ (ядро", kernel+")…")
 	cmd := exec.Command("mkinitcpio", "-c", conf, "-k", kernel, "-U", out+".part",
 		"--cmdline", cmdFile, "--kernelimage", vmlinuz)
 	if b, err := cmd.CombinedOutput(); err != nil {

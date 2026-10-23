@@ -8,17 +8,17 @@ import (
 	"lolssd/hostprofile"
 )
 
-// VNCPort — порт wayvnc выхода HEADLESS-(i+1); та же нумерация в cmd/lolssd-wsl/desktop.go.
+// VNCPort — порт VNC-сервера QEMU для выхода i virtio-gpu (монитора i Windows).
 func VNCPort(i int) int { return 5901 + i }
 
 // ViewerArgs — аргументы TigerVNC для монитора i: окно открывается на этом мониторе и сразу
 // уходит в полноэкранный режим на нём же (FullScreenMode=Current). В полноэкранном режиме
 // TigerVNC забирает всю клавиатуру, включая Win, — она становится Super в Hyprland.
-// Размер экрана задаёт Hyprland по монитору, поэтому RemoteResize выключен; wayvnc слушает
-// только 127.0.0.1, без пароля.
+// RemoteResize: просмотрщик просит у QEMU размер своего окна — выход virtio-gpu получает родное
+// разрешение монитора, и Hyprland его берёт. VNC QEMU слушает только 127.0.0.1, без пароля.
 func ViewerArgs(m hostprofile.WinMonitor, i int) []string {
 	return []string{
-		"-FullScreen=1", "-FullScreenMode=Current", "-RemoteResize=0",
+		"-FullScreen=1", "-FullScreenMode=Current", "-RemoteResize=1",
 		// Канал локальный: без автоподбора и JPEG — Tight без потерь, полный цвет, слабый zlib
 		// (меньше работы процессору на обеих сторонах).
 		"-AutoSelect=0", "-PreferredEncoding=Tight", "-NoJPEG=1", "-FullColor=1", "-CompressLevel=1",

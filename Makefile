@@ -9,7 +9,7 @@ GOFLAGS := -trimpath -ldflags=-s\ -w
 export CGO_ENABLED := 0
 
 WIN := dist/windows/C
-.PHONY: dist wsl kmod iso test clean
+.PHONY: dist wsl kmod qemu iso test clean
 
 dist:
 	mkdir -p dist/LOLSSD/host dist/LOLSSD/profiles "$(WIN)/Program Files/lolssd" "$(WIN)/Windows/Setup/Scripts" dist/wsl
@@ -33,6 +33,10 @@ wsl: dist
 # Заголовки ядра WSL для DKMS-модулей хоста; make wsl кладёт их в пусковой дистрибутив.
 kmod:
 	build/kmod.sh
+
+# QEMU для Windows (ВМ с системой хоста, lolssd-win desktop): dist/qemu, build/qemu.sh.
+qemu:
+	build/qemu.sh
 
 # Установочный ISO со всем внутри: make iso ISO=~/Downloads/Win11.iso [DRIVERS=~/lolssd-drivers] [EDITION="Windows 11 Pro"]
 EDITION ?= Windows 11 Home

@@ -30,11 +30,15 @@ type Profile struct {
 	Monitors   []Monitor `json:"monitors"`
 	Keyboard   Keyboard  `json:"keyboard"`
 	VM         *VMImage  `json:"vm,omitempty"`
+	// AudioPCI — PCI-адрес встроенной звуковой карты (HDA с аналоговым кодеком), например
+	// 0000:03:00.6. Звуковая карта ВМ ставится на тот же адрес: имена устройств PipeWire
+	// (alsa_output.pci-0000_03_00.6...) и настройки, завязанные на них, совпадают.
+	AudioPCI string `json:"audio_pci,omitempty"`
 }
 
-// VMImage — образ загрузки системы хоста в ВМ Hyper-V (UKI на разделе LOLSSD): её ядро, initramfs
-// с драйверами Hyper-V и командная строка с корнем по UUID. Ядро в образе должно совпадать с
-// модулями системы: после обновления ядра на хосте профиль снимают заново.
+// VMImage — образ загрузки системы хоста в ВМ (UKI на разделе LOLSSD): её ядро, initramfs и
+// командная строка с корнем по UUID. Ядро в образе должно совпадать с модулями системы: после
+// обновления ядра на хосте профиль снимают заново.
 type VMImage struct {
 	Path    string `json:"path"`    // относительно раздела LOLSSD, например vm/<machine-id>.efi
 	Kernel  string `json:"kernel"`  // uname -r

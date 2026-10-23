@@ -103,6 +103,7 @@ func runProfile() int {
 	p.Swaps = hostSwaps()
 	p.Monitors = hostMonitors()
 	p.Keyboard = hostKeyboard()
+	p.AudioPCI = hostAudioPCI()
 
 	dir, dirErr := lolssdDir()
 	if dirErr == nil {
@@ -442,4 +443,24 @@ func hostKeyboard() hostprofile.Keyboard {
 		}
 	}
 	return kb
+}
+
+// hostAudioPCI — PCI-адрес первой звуковой карты HDA с аналоговым кодеком (не HDMI).
+func hostAudioPCI() string {
+	cards, _ := filepath.Glob("/sys/class/sound/card*")
+	for _, c := range cards {
+		dev, err := filepath.EvalSymlinks(filepath.Join(c, "device"))
+		addr := filepath.Base(dev)
+		if err != nil || strings.Count(addr, ":") != 2 {
+			continue // не PCI (USB и т. п.)
+		}
+		codecs, _ := filepath.Glob(filepath.Join("/proc/asound", filepath.Base(c), "codec#*"))
+		for _, f := range codecs {
+			first, _, _ := strings.Cut(readFile(f), "\n")
+			if !strings.Contains(first, "HDMI") {
+				return addr
+			}
+		}
+	}
+	return ""
 }

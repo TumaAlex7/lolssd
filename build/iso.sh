@@ -9,7 +9,8 @@
 #     приложения и компоненты Windows удаляет DISM в виртуалке установки (lolssd-setup.ps1);
 #   - наши файлы лежат прямо в образе Windows, установщик ничего не докачивает и не копирует:
 #       \Windows\Setup\Scripts\   SetupComplete.cmd, lolssd-setup.ps1, lolssd.reg
-#       \Program Files\lolssd\    lolssd-win.exe, lolssd-drivers.ps1, vncviewer.exe (TigerVNC)
+#       \Program Files\lolssd\    lolssd-win.exe, lolssd-drivers.ps1, vncviewer.exe (TigerVNC),
+#                                 qemu\ (QEMU для ВМ с системой хоста, make qemu)
 #       \ProgramData\lolssd\wsl\  пусковой WSL-дистрибутив и MSI WSL (если собраны make wsl)
 #       \Drivers\                 INF-драйверы (если указаны)
 #   - autounattend.xml в корне ISO (установщик ищет его там);
@@ -70,6 +71,11 @@ fi
 	echo "add '$dist/windows/lolssd.reg' '/Windows/Setup/Scripts/lolssd.reg'"
 	echo "add '$dist/windows/C/Program Files/lolssd' '/Program Files/lolssd'"
 	[[ -s $viewer ]] && echo "add '$viewer' '/Program Files/lolssd/vncviewer.exe'"
+	if [[ -f $dist/qemu/qemu-system-x86_64w.exe ]]; then
+		echo "add '$dist/qemu' '/Program Files/lolssd/qemu'"
+	else
+		echo "  (нет dist/qemu — в образе не будет рабочего стола Linux; make qemu)" >&2
+	fi
 	compgen -G "$dist/wsl/*.msi" >/dev/null ||
 		echo "  (нет MSI WSL в dist/wsl — WSL в образе не будет; make wsl докачает)" >&2
 	if [[ -f $dist/wsl/lolssd.tar ]]; then

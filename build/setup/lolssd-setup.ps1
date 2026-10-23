@@ -57,6 +57,11 @@ Step 'BitLocker off on system drive' {
 }
 
 # Needed only for Linux inside Windows, but enabling later would cost an extra reboot.
+# Windows Hypervisor Platform: QEMU runs the host's Linux on Windows' own hypervisor (WHPX).
+Step 'Windows Hypervisor Platform' {
+    Enable-WindowsOptionalFeature -Online -All -NoRestart -FeatureName HypervisorPlatform | Out-Null
+}
+
 Step 'WSL and Virtual Machine Platform' {
     Enable-WindowsOptionalFeature -Online -All -NoRestart -FeatureName VirtualMachinePlatform | Out-Null
     Enable-WindowsOptionalFeature -Online -All -NoRestart -FeatureName Microsoft-Windows-Subsystem-Linux | Out-Null
