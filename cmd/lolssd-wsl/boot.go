@@ -25,7 +25,8 @@ import (
 //     устройств для повторного монтирования в контейнере нет — systemd ждал бы их и ушёл в
 //     аварийный режим;
 //   - NetworkManager, networkd, iwd, wpa_supplicant замаскированы: сетью WSL владеет Windows
-//     (в режиме mirrored это её же адаптеры);
+//     (в режиме mirrored это её же адаптеры); keyd и input-remapper — тоже: клавиатурой владеет
+//     Windows, её переназначения уже в Scancode Map;
 //   - graphical.target (дисплейный менеджер) не загружается, а console-getty замаскирован —
 //     вход на консоли делает lolssd-hyprland, как на tty1.
 // Обновления ядра блокирует хук pacman (nspawnBase).
@@ -36,7 +37,10 @@ var hostMasks = []string{"NetworkManager.service", "NetworkManager-wait-online.s
 	"systemd-networkd.service", "systemd-networkd.socket", "systemd-networkd-wait-online.service",
 	"iwd.service", "wpa_supplicant.service",
 	// Приглашение входа на консоли контейнера: консоль занимает сеанс Hyprland (как tty1).
-	"console-getty.service"}
+	"console-getty.service",
+	// Переназначение клавиш настоящей клавиатуры: её у ВМ WSL нет (ввод — через wayvnc), а
+	// переназначения keyd уже применены в Windows (Scancode Map, keymap).
+	"keyd.service", "input-remapper.service", "input-remapper-daemon.service"}
 
 // bootDesktop запускает контейнер с systemd хоста, в котором сервис lolssd-hyprland от имени
 // пользователя выполняет command с окружением env. Контейнер завершается вместе с ним и с его
