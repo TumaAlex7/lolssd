@@ -49,7 +49,8 @@ func bootDesktop(p hostprofile.Profile, extra, env, command []string) (*exec.Cmd
 	run := fmt.Sprintf("/run/lolssd/boot-%d", os.Getpid())
 	os.RemoveAll(run)
 	units, polkit := filepath.Join(run, "units"), filepath.Join(run, "polkit")
-	for _, d := range []string{units, polkit} {
+	userUnits := filepath.Join(run, "user-units")
+	for _, d := range []string{units, polkit, filepath.Join(userUnits, "default.target.wants")} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			return nil, err
 		}
@@ -60,21 +61,26 @@ func bootDesktop(p hostprofile.Profile, extra, env, command []string) (*exec.Cmd
 		}
 	}
 	files := map[string]string{
-		filepath.Join(polkit, "49-lolssd.rules"):        polkitRule(p.User.Name),
-		filepath.Join(units, desktopTarget):             targetUnit,
-		filepath.Join(units, "lolssd-hyprland.service"): hyprlandUnit(p, env, command),
-		filepath.Join(run, "empty"):                     "",
+		filepath.Join(polkit, "49-lolssd.rules"):              polkitRule(p.User.Name),
+		filepath.Join(userUnits, "lolssd-wslg-audio.service"): audioUnit,
+		filepath.Join(units, desktopTarget):                   targetUnit,
+		filepath.Join(units, "lolssd-hyprland.service"):       hyprlandUnit(p, env, command),
+		filepath.Join(run, "empty"):                           "",
 	}
 	for path, text := range files {
 		if err := os.WriteFile(path, []byte(text), 0o644); err != nil {
 			return nil, err
 		}
 	}
+	if err := os.Symlink("../lolssd-wslg-audio.service", filepath.Join(userUnits, "default.target.wants", "lolssd-wslg-audio.service")); err != nil {
+		return nil, err
+	}
 	nspawn = append(nspawn, "--boot", "--console=read-only",
 		// Журнал (--link-journal=no в nspawnBase) systemd хоста ведёт сам, в своём
 		// /var/log/journal на диске, как при обычной загрузке.
 		"--bind-ro="+units+":/run/systemd/system",
-		"--bind-ro="+polkit+":/run/polkit-1/rules.d")
+		"--bind-ro="+polkit+":/run/polkit-1/rules.d",
+		"--bind-ro="+userUnits+":/run/systemd/user")
 	// Только существующие файлы: привязка к несуществующему создала бы его на диске хоста.
 	for _, f := range []string{"etc/fstab", "etc/crypttab"} {
 		if _, err := os.Stat(filepath.Join(rootDir, f)); err == nil {
@@ -99,6 +105,28 @@ func polkitRule(user string) string {
 	return "// lolssd: рабочий стол хоста в Windows\npolkit.addRule(function(action, subject) {\n" +
 		"  if (subject.user == " + strconv.Quote(user) + ") return polkit.Result.YES;\n});\n"
 }
+
+// audioUnit — пользовательский юнит: звук PipeWire уходит в Windows. Звуковых устройств у ВМ WSL
+// нет, есть только PulseAudio-сервер WSLg, а PipeWire хоста о нём не знает (громкость 100 %,
+// звука нет). pipewire-pulse поднимает к нему туннели вывода и записи и делает их устройствами
+// по умолчанию. Только в этом режиме: юнит — в /run/systemd/user контейнера.
+var audioUnit = `[Unit]
+Description=lolssd: звук через Windows (PulseAudio-сервер WSLg)
+Wants=pipewire-pulse.socket wireplumber.service
+After=pipewire-pulse.socket wireplumber.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStartPre=/bin/sh -c 'for i in $(seq 100); do pactl info >/dev/null 2>&1 && exit 0; sleep 0.2; done; exit 1'
+ExecStart=/usr/bin/pactl load-module module-tunnel-sink server=unix:` + inner + `/wslg/PulseServer sink_name=windows sink_properties=device.description=Windows
+ExecStart=/usr/bin/pactl load-module module-tunnel-source server=unix:` + inner + `/wslg/PulseServer source_name=windows-mic source_properties=device.description=Windows-mic
+ExecStart=/usr/bin/pactl set-default-sink windows
+ExecStart=/usr/bin/pactl set-default-source windows-mic
+
+[Install]
+WantedBy=default.target
+`
 
 const targetUnit = `[Unit]
 Description=lolssd: рабочий стол хоста в Windows

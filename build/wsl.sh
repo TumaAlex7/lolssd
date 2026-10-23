@@ -104,6 +104,7 @@ install -m 0755 "$dist/wsl/lolssd-wsl" "$r/usr/local/bin/lolssd-wsl"
 install -m 0644 "$repo/build/wsl/wsl.conf" "$r/etc/wsl.conf"
 install -Dm 0644 "$repo/build/hypr/aquamarine-headless-device.patch" "$r/usr/local/share/lolssd/aquamarine-headless-device.patch"
 install -Dm 0644 "$repo/build/hypr/gbm-probe.c" "$r/usr/local/share/lolssd/gbm-probe.c"
+install -Dm 0644 "$repo/build/hypr/lolssd-gbm.c" "$r/usr/local/share/lolssd/lolssd-gbm.c"
 # Только dlsym и strcmp из libc: собранное здесь работает и с glibc Debian.
 mkdir -p "$r/usr/local/lib/lolssd"
 cc -shared -fPIC -O2 -o "$r/usr/local/lib/lolssd/wayvnc-wlr-only.so" "$repo/build/hypr/wayvnc-wlr-only.c"

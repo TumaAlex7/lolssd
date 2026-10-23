@@ -38,6 +38,7 @@ const (
 	vncPort0    = 5900              // выход N — порт 5900+N
 	aqLibIn     = inner + "/aq/lib" // кэш внутри контейнера
 	gbmProbeSrc = "/usr/local/share/lolssd/gbm-probe.c"
+	gbmShimSrc  = "/usr/local/share/lolssd/lolssd-gbm.c"
 )
 
 // runHyprland: vgem, пропатченный aquamarine, Hyprland без экрана и wayvnc на каждый выход.
@@ -100,7 +101,9 @@ func runHyprland(p hostprofile.Profile, wins []hostprofile.WinMonitor, n int, cf
 		env := []string{driver, "LP_NUM_THREADS=4",
 			"AQ_HEADLESS_DRM_DEVICE=" + card,
 			"AQ_HEADLESS_MODES=" + strings.Join(modes, ","),
-			"LD_LIBRARY_PATH=" + aqLibIn + ":" + inner + "/lib/lib"}
+			"LD_LIBRARY_PATH=" + aqLibIn + ":" + inner + "/lib/lib",
+			// Всем программам сеанса: GBM d3d12 не даёт scanout-буферов (build/hypr/lolssd-gbm.c).
+			"LD_PRELOAD=" + aqLibIn + "/lolssd-gbm.so"}
 		// Через start-hyprland, как задумано в Hyprland ≥ 0.53 (иначе он предупреждает в углу
 		// экрана): сторожевой процесс, который следит за Hyprland. Построчный вывод (stdbuf):
 		// иначе при падении он теряется.
@@ -264,9 +267,14 @@ func ensureAquamarine(p hostprofile.Profile) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("патч aquamarine: %w", err)
 	}
-	dir := filepath.Join(rootDir, aqCache, fmt.Sprintf("%s-%x", version, sha256.Sum256(patch))[:len(version)+9])
+	shim, err := os.ReadFile(gbmShimSrc)
+	if err != nil {
+		return "", fmt.Errorf("lolssd-gbm.c: %w", err)
+	}
+	dir := filepath.Join(rootDir, aqCache, fmt.Sprintf("%s-%x", version, sha256.Sum256(append(patch, shim...)))[:len(version)+9])
 	lib := filepath.Join(dir, "lib", base)
-	if _, err := os.Stat(lib); err == nil {
+	_, errShim := os.Stat(filepath.Join(dir, "lib", "lolssd-gbm.so"))
+	if _, err := os.Stat(lib); err == nil && errShim == nil {
 		pruneAquamarine(dir)
 		return lib, nil
 	}
@@ -277,6 +285,9 @@ func ensureAquamarine(p hostprofile.Profile) (string, error) {
 	}
 	if err == nil {
 		err = os.WriteFile(filepath.Join(dir, "aquamarine.patch"), patch, 0o644)
+	}
+	if err == nil {
+		err = os.WriteFile(filepath.Join(dir, "lolssd-gbm.c"), shim, 0o644)
 	}
 	if err != nil {
 		return "", fmt.Errorf("подготовка сборки aquamarine: %w", err)
@@ -297,10 +308,12 @@ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release >/dev/null
 ninja -C build >/dev/null
 mkdir -p "$out/lib"
 cp -P build/libaquamarine.so* "$out/lib/"
-rm -rf "$src"`
+rm -rf "$src"
+cc -shared -fPIC -O2 -o "$out/lib/lolssd-gbm.so" "$out/lolssd-gbm.c" -ldl`
 	code := runIn(p, []string{"--bind=" + dir + ":" + inner + "/aqbuild"},
 		[]string{"sh", "-c", script, "sh", version})
-	if _, err := os.Stat(lib); code != 0 || err != nil {
+	_, errShim = os.Stat(filepath.Join(dir, "lib", "lolssd-gbm.so"))
+	if _, err := os.Stat(lib); code != 0 || err != nil || errShim != nil {
 		return "", fmt.Errorf("сборка aquamarine %s не удалась (код %d)", version, code)
 	}
 	pruneAquamarine(dir)
