@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -108,6 +109,7 @@ func nspawnBase(p hostprofile.Profile) ([]string, error) {
 		fmt.Fprintln(os.Stderr, "внимание: нет /dev/dxg, графика без ускорения")
 	}
 	nspawn = append(nspawn, devBinds()...)
+	nspawn = append(nspawn, devAllow()...)
 	if p.Distro.ID == "arch" || strings.Contains(p.Distro.IDLike, "arch") {
 		upper := "/run/lolssd/pacman.d"
 		err := os.MkdirAll(filepath.Join(upper, "hooks"), 0o755)
@@ -173,6 +175,32 @@ func nspawnCmd() []string {
 		}
 	}
 	return []string{loaders[0], "--library-path", strings.Join(libs, ":"), bin}
+}
+
+// devAllow — доступ ко всем устройствам. Проброса узлов мало: nspawn пускает к ним через свой
+// cgroup-фильтр только по белому списку, остальное — EPERM (так падали vgem и /dev/mapper/control).
+// Разрешаются все группы устройств ядра из /proc/devices, символьные и блочные.
+func devAllow() []string {
+	b, _ := os.ReadFile("/proc/devices")
+	args := []string{"--property=DevicePolicy=auto"}
+	kind := ""
+	for _, line := range strings.Split(string(b), "\n") {
+		switch {
+		case strings.HasPrefix(line, "Character devices"):
+			kind = "char-"
+		case strings.HasPrefix(line, "Block devices"):
+			kind = "block-"
+		default:
+			// Группы с «/» в имени (/dev/tty, /dev/console, /dev/vc/0) — терминалы, их nspawn даёт
+			// сам; такое имя не годится для DeviceAllow=char-….
+			if f := strings.Fields(line); kind != "" && len(f) == 2 && !strings.Contains(f[1], "/") {
+				if a := "--property=DeviceAllow=" + kind + f[1] + " rwm"; !slices.Contains(args, a) {
+					args = append(args, a)
+				}
+			}
+		}
+	}
+	return args
 }
 
 // nspawnEnv — окружение для systemd-nspawn: без фильтра системных вызовов (seccomp) и с /sys,
