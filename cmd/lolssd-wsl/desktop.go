@@ -29,8 +29,10 @@ import (
 
 const (
 	// На диске системы хоста: переимпорт пускового дистрибутива (каждое обновление SSD) его не
-	// стирает. По версии aquamarine и хэшу патча.
-	aqCache     = "var/cache/lolssd/aquamarine"
+	// стирает. В /var/tmp — хост сам удаляет оттуда то, к чему не обращались 30 дней
+	// (systemd-tmpfiles-clean): если SSD больше не подключать, кэш не останется. По версии
+	// aquamarine и хэшу патча.
+	aqCache     = "var/tmp/lolssd-aquamarine"
 	aqPatch     = "/usr/local/share/lolssd/aquamarine-headless-device.patch"
 	xdgDir      = "/run/lolssd/xdg" // XDG_RUNTIME_DIR сеанса, общий с wayvnc
 	vncPort0    = 5900              // выход N — порт 5900+N
