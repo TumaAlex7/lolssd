@@ -154,6 +154,8 @@ func desktop() int {
 	viewers := make([]*exec.Cmd, len(mons))
 	started := make([]time.Time, len(mons))
 	given := make([]bool, len(mons)) // отдан Windows
+	sized := make([]bool, len(mons)) // выход включён запросом размера (первый включён сразу)
+	sized[0] = true
 	exited := make(chan int, len(mons))
 	open := func(i int) {
 		c := exec.Command(viewer, winctl.ViewerArgs(mons[i], i)...)
@@ -212,6 +214,14 @@ func desktop() int {
 			}
 			for i := range mons {
 				if viewers[i] == nil && !given[i] && listening(winctl.VNCPort(i)) {
+					if !sized[i] {
+						addr := fmt.Sprintf("127.0.0.1:%d", winctl.VNCPort(i))
+						if err := winctl.SetDesktopSize(addr, mons[i].Width, mons[i].Height); err != nil {
+							log.Printf("монитор %d: размер %dx%d: %v", i+1, mons[i].Width, mons[i].Height, err)
+							continue
+						}
+						sized[i] = true
+					}
 					open(i)
 				}
 			}

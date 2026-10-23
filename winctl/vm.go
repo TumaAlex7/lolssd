@@ -39,7 +39,7 @@ func QEMUArgs(v VM) []string {
 		accel += ",kernel-irqchip=off"
 	}
 	a := []string{
-		"-name", "lolssd", "-nodefaults", "-machine", "q35", "-accel", accel,
+		"-name", "lolssd", "-nodefaults", "-machine", "q35,vmport=off", "-accel", accel,
 		"-cpu", "max,vmx=off,svm=off", "-smp", strconv.Itoa(v.CPUs), "-m", strconv.Itoa(v.MemMiB),
 		"-kernel", v.Kernel, "-initrd", v.Initrd, "-append", v.Cmdline,
 	}
@@ -48,6 +48,10 @@ func QEMUArgs(v VM) []string {
 			"-device", fmt.Sprintf("nvme,drive=disk%d,serial=%s,model=%s", i, optEscape(nvmeID(d.Serial, 20, fmt.Sprintf("lolssd%d", i))),
 				optEscape(nvmeID(d.Model, 40, "QEMU NVMe Ctrl"))))
 	}
+	// Включён только первый выход; остальные включает запрос размера по VNC (SetDesktopSize,
+	// lolssd-win до открытия просмотрщиков). Список outputs с размерами включил бы их сразу, но
+	// с ним QEMU 11 отдаёт события указателя всех выходов планшету последнего (проверено на
+	// стенде: VNC первого монитора двигал курсор по второму).
 	a = append(a, "-device", fmt.Sprintf("virtio-gpu-pci,id=video0,max_outputs=%d", max(len(v.Monitors), 1)))
 	if len(v.Monitors) > 0 {
 		a[len(a)-1] += fmt.Sprintf(",xres=%d,yres=%d", v.Monitors[0].Width, v.Monitors[0].Height)
@@ -59,7 +63,7 @@ func QEMUArgs(v VM) []string {
 			"-device", fmt.Sprintf("usb-tablet,bus=xhci.0,serial=lolssd-head%d,display=video0,head=%d", i, i))
 	}
 	a = append(a, "-smbios", "type=11,value=io.systemd.credential.binary:udev.rules.70-lolssd-vm="+
-		base64.StdEncoding.EncodeToString([]byte(CalibrationRules(v.Monitors))))
+		base64.StdEncoding.EncodeToString([]byte(VMUdevRules(v.Monitors))))
 	a = append(a, "-audiodev", "dsound,id=snd0")
 	a = append(a, hdaArgs(v.AudioPCI)...)
 	a = append(a, "-nic", "user,model=virtio-net-pci",
@@ -68,18 +72,25 @@ func QEMUArgs(v VM) []string {
 	return a
 }
 
-// CalibrationRules — правила udev, которые ВМ передаёт системе при загрузке (учётные данные
-// systemd udev.rules.*, через SMBIOS): у планшета каждого выхода — калибровочная матрица
-// libinput. Hyprland растягивает абсолютные координаты устройства на всю раскладку мониторов,
+// VMUdevRules — правила udev, которые ВМ передаёт системе при загрузке (учётные данные systemd
+// udev.rules.*, через SMBIOS; на диск хоста ничего не пишется).
+//
+// Клавиатура: PS/2-клавиатура QEMU не умеет F16–F23, поэтому Windows шлёт F23 как F24
+// (Scancode Map в lolssd-win), а здесь скан-коду 0x76 возвращается F23. Встроенная команда
+// keyboard — отдельным правилом: IMPORT выполняется до присваиваний своего правила.
+//
+// Мышь: у планшета каждого выхода — калибровочная матрица libinput. Hyprland растягивает абсолютные координаты устройства на всю раскладку мониторов,
 // а планшет QEMU отдаёт их внутри своего выхода; матрица переводит одно в другое. Раскладка —
 // как её ставит Hyprland без правил для выходов: в ряд слева направо, по верхнему краю, масштаб 1.
-func CalibrationRules(mons []hostprofile.WinMonitor) string {
+func VMUdevRules(mons []hostprofile.WinMonitor) string {
+	var b strings.Builder
+	b.WriteString(`ACTION!="remove", SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="AT Translated Set 2 keyboard", ENV{KEYBOARD_KEY_76}="f23"` + "\n")
+	b.WriteString(`ACTION!="remove", SUBSYSTEM=="input", KERNEL=="event*", ENV{KEYBOARD_KEY_76}=="f23", IMPORT{builtin}="keyboard"` + "\n")
 	total, height := 0, 0
 	for _, m := range mons {
 		total += m.Width
 		height = max(height, m.Height)
 	}
-	var b strings.Builder
 	x := 0
 	for i, m := range mons {
 		fmt.Fprintf(&b, `ACTION!="remove", SUBSYSTEM=="input", KERNEL=="event*", ATTRS{serial}=="lolssd-head%d", ENV{LIBINPUT_CALIBRATION_MATRIX}="%s 0 %s 0 %s 0"`+"\n",

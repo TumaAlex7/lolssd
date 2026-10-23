@@ -8,13 +8,16 @@ import (
 	"lolssd/hostprofile"
 )
 
-func TestCalibrationRules(t *testing.T) {
+func TestVMUdevRules(t *testing.T) {
 	// Проверено в QEMU/KVM на Hyprland 0.56: центр второго выхода — (3199, 540).
 	mons := []hostprofile.WinMonitor{{Width: 1920, Height: 1080}, {X: 1920, Width: 2560, Height: 1080}}
-	got := CalibrationRules(mons)
+	got := VMUdevRules(mons)
 	for _, want := range []string{
 		`ATTRS{serial}=="lolssd-head0", ENV{LIBINPUT_CALIBRATION_MATRIX}="0.428571 0 0.000000 0 1.000000 0"`,
 		`ATTRS{serial}=="lolssd-head1", ENV{LIBINPUT_CALIBRATION_MATRIX}="0.571429 0 0.428571 0 1.000000 0"`,
+		// Проверено на стенде: Win+Shift+F24 от VNC → keyd laptop.conf → RIGHTMETA.
+		`ATTRS{name}=="AT Translated Set 2 keyboard", ENV{KEYBOARD_KEY_76}="f23"` + "\n",
+		`ENV{KEYBOARD_KEY_76}=="f23", IMPORT{builtin}="keyboard"`,
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("нет %q в\n%s", want, got)
@@ -59,6 +62,7 @@ func TestQEMUArgs(t *testing.T) {
 		"if=none,id=disk0,format=raw,file=\\\\.\\PhysicalDrive1",
 		"nvme,drive=disk0,serial=S7J1NX0X598346,model=SAMSUNG MZVL8512HELU-00BTW",
 		"virtio-gpu-pci,id=video0,max_outputs=2,xres=2560,yres=1600",
+		"q35,vmport=off",
 		"127.0.0.1:1,id=vnc0,display=video0,head=0",
 		"127.0.0.1:2,id=vnc1,display=video0,head=1",
 		"usb-tablet,bus=xhci.0,serial=lolssd-head1,display=video0,head=1",
@@ -73,7 +77,7 @@ func TestQEMUArgs(t *testing.T) {
 		if x == "-smbios" {
 			b64 := strings.TrimPrefix(a[i+1], "type=11,value=io.systemd.credential.binary:udev.rules.70-lolssd-vm=")
 			rules, err := base64.StdEncoding.DecodeString(b64)
-			if err != nil || string(rules) != CalibrationRules(v.Monitors) {
+			if err != nil || string(rules) != VMUdevRules(v.Monitors) {
 				t.Errorf("smbios: %v %q", err, rules)
 			}
 		}

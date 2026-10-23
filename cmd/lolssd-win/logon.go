@@ -25,8 +25,7 @@ import (
 )
 
 // logon — задание при входе пользователя (с повышенными правами; в заданиях старых систем
-// команда называется mount): ярлыки, переназначения клавиш из профиля хоста и уборка остатков
-// режима WSL. Профиля для этого компьютера нет — режим «Linux внутри Windows» не включали.
+// команда называется mount): ярлыки, Scancode Map для ВМ и уборка остатков режима WSL. Профиля для этого компьютера нет — режим «Linux внутри Windows» не включали.
 func logon() int {
 	fixShortcuts()
 	removeWSL()
@@ -41,11 +40,11 @@ func logon() int {
 		return 0
 	}
 	log.Printf("профиль %s (%s, %s)", p.MachineID, p.Distro.ID, p.User.Name)
-	if applyScancodeMap(p) {
+	if applyScancodeMap() {
 		const mbOK, mbIconInfo, mbSetForeground = 0x0, 0x40, 0x10000
 		procMessageBox.Call(0, uintptr(unsafe.Pointer(windows.StringToUTF16Ptr(
-			"Переназначения клавиш из профиля Linux записаны.\n"+
-				"Они начнут действовать после перезагрузки Windows."))),
+			"Клавиша Copilot переназначена для Linux (F23 → F24).\n"+
+				"Это начнёт действовать после перезагрузки Windows."))),
 			uintptr(unsafe.Pointer(windows.StringToUTF16Ptr("lolssd"))), mbOK|mbIconInfo|mbSetForeground)
 	}
 	return 0
@@ -165,35 +164,24 @@ func removeWSL() {
 
 var procMessageBox = user32.NewProc("MessageBoxW")
 
-// applyScancodeMap записывает переназначения клавиш из профиля (docs/ARCHITECTURE.md §7) в
-// Scancode Map. Драйвер клавиатуры читает его при загрузке, поэтому при изменении нужна
-// перезагрузка — тогда возвращает true.
-func applyScancodeMap(p hostprofile.Profile) bool {
-	plan := keymap.Build(keymap.ParseKeyd(p.Keyboard.Keyd))
-	for _, n := range plan.Notes {
-		log.Println("клавиши, не переносится:", n)
-	}
+// vmScancodes — Scancode Map Windows для ВМ: клавиши в ней переназначает keyd самой системы
+// хоста, как на железе, поэтому из её правил в Windows ничего не переносится. Остаётся только
+// перевозка F23 (0x6E): PS/2-клавиатура QEMU не умеет F16–F23, и клавиша Copilot (Win+Shift+F23)
+// доходила бы без F23. Windows шлёт её как F24 (0x76), а в ВМ правило udev (winctl.VMUdevRules)
+// возвращает этому скан-коду F23 — и keyd получает тот же аккорд, что на железе.
+var vmScancodes = map[uint16]uint16{0x006e: 0x0076}
+
+// applyScancodeMap приводит Scancode Map к vmScancodes. Драйвер клавиатуры читает его при
+// загрузке, поэтому при изменении нужна перезагрузка — тогда возвращает true.
+func applyScancodeMap() bool {
 	k, _, err := registry.CreateKey(registry.LOCAL_MACHINE, `SYSTEM\CurrentControlSet\Control\Keyboard Layout`, registry.QUERY_VALUE|registry.SET_VALUE)
 	if err != nil {
 		log.Println("Scancode Map:", err)
 		return false
 	}
 	defer k.Close()
-	cur, _, curErr := k.GetBinaryValue("Scancode Map")
-	if len(plan.Scancodes) == 0 {
-		// Переназначать нечего: значения быть не должно (в том числе старого транспорта
-		// Win → F13/F14 у систем, установленных до перехода на TigerVNC).
-		if curErr != nil {
-			return false
-		}
-		if err := k.DeleteValue("Scancode Map"); err != nil {
-			log.Println("Scancode Map:", err)
-			return false
-		}
-		log.Println("Scancode Map удалён, нужна перезагрузка")
-		return true
-	}
-	want := keymap.ScancodeMap(plan.Scancodes)
+	cur, _, _ := k.GetBinaryValue("Scancode Map")
+	want := keymap.ScancodeMap(vmScancodes)
 	if bytes.Equal(cur, want) {
 		return false
 	}
@@ -201,7 +189,7 @@ func applyScancodeMap(p hostprofile.Profile) bool {
 		log.Println("Scancode Map:", err)
 		return false
 	}
-	log.Printf("Scancode Map обновлён (%d переназначений), нужна перезагрузка", len(plan.Scancodes))
+	log.Println("Scancode Map: F23 → F24 для ВМ, нужна перезагрузка")
 	return true
 }
 
