@@ -30,7 +30,7 @@ dist:
 wsl: dist
 	build/wsl.sh
 
-# Модули ядра под ядро WSL (amneziawg); make wsl кладёт их в пусковой дистрибутив.
+# Заголовки ядра WSL для DKMS-модулей хоста; make wsl кладёт их в пусковой дистрибутив.
 kmod:
 	build/kmod.sh
 

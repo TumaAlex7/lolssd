@@ -23,9 +23,9 @@ import (
 // чисто: не в гибернации (иначе запись испортит ФС спящей системы) и без незавершённого
 // журнала ext4. Повторный вызов, когда всё уже поднято, ничего не делает.
 func up() int {
-	loadModules()
 	if mounted(rootDir) {
 		fmt.Println("система хоста уже поднята в", rootDir)
+		hostModules()
 		return 0
 	}
 	p, err := loadProfile()
@@ -97,6 +97,7 @@ func up() int {
 		fmt.Printf("  %-12s %-6s %s\n", m.Target, m.FSType, devs[m.Target])
 	}
 	fmt.Println("система хоста поднята в", rootDir)
+	hostModules()
 	return 0
 }
 
@@ -358,19 +359,90 @@ func mounted(dir string) bool {
 	return false
 }
 
-// loadModules грузит модули, собранные под ядро WSL (build/kmod.sh: amneziawg и т. п.), с их
-// зависимостями из модулей самого WSL. Система хоста в контейнере их сама не загрузит: её модули
-// собраны под её ядро. Ядро с другим интерфейсом символов модуль не примет — тогда предупреждение,
-// запуск продолжается.
-func loadModules() {
-	rel, err := os.ReadFile("/proc/sys/kernel/osrelease")
+// DKMS-модули системы хоста под ядро WSL. Ядро WSL общее и её модули (собранные под её ядро) не
+// грузит, поэтому её же DKMS собирает их под ядро WSL по заголовкам из пускового дистрибутива
+// (build/kmod.sh) — один раз на версию модуля, в кэш /var/tmp/lolssd-kmod (хост сам чистит его
+// через 30 дней без обращений). Запись DKMS для ядра WSL сразу удаляется: в /var/lib/dkms хоста
+// не остаётся чужого ядра. Затем модули грузятся с зависимостями из модулей самого WSL.
+const (
+	kheadersDir = "/usr/local/lib/lolssd/kheaders"
+	kmodCache   = "var/tmp/lolssd-kmod" // в системе хоста
+)
+
+func hostModules() {
+	b, err := os.ReadFile("/proc/sys/kernel/osrelease")
 	if err != nil {
 		return
 	}
-	kos, _ := filepath.Glob(filepath.Join("/usr/local/lib/lolssd/modules", strings.TrimSpace(string(rel)), "*.ko"))
+	rel := strings.TrimSpace(string(b))
+	kh := filepath.Join(kheadersDir, rel)
+	if _, err := os.Stat(kh); err != nil {
+		return
+	}
+	if _, err := os.Stat(filepath.Join(rootDir, "usr/bin/dkms")); err != nil {
+		return
+	}
+	p, err := loadProfile()
+	if err != nil {
+		return
+	}
+	cache := filepath.Join(rootDir, kmodCache, rel)
+	confs, _ := filepath.Glob(filepath.Join(rootDir, "usr/src/*/dkms.conf"))
+	keep := map[string]bool{}
+	for _, conf := range confs {
+		name, version := dkmsVar(conf, "PACKAGE_NAME"), dkmsVar(conf, "PACKAGE_VERSION")
+		// Драйверы NVIDIA в WSL не нужны: видеокарта идёт через dxg.
+		if name == "" || version == "" || strings.HasPrefix(name, "nvidia") {
+			continue
+		}
+		id := name + "-" + version
+		keep[id] = true
+		if kos, _ := filepath.Glob(filepath.Join(cache, id, "*.ko*")); len(kos) > 0 {
+			continue
+		}
+		fmt.Printf("Собираю модуль %s под ядро WSL (один раз на версию)…\n", id)
+		script := `dkms build -m "$1" -v "$2" -k "$3" --kernelsourcedir "$4" >/tmp/lolssd-dkms.log 2>&1
+r=$?
+if [ $r = 0 ]; then mkdir -p "$5" && find /var/lib/dkms/"$1"/"$2"/"$3" -name '*.ko*' -exec cp {} "$5" \;; else tail -5 /tmp/lolssd-dkms.log; fi
+dkms remove -m "$1" -v "$2" -k "$3" >/dev/null 2>&1
+exit $r`
+		code := runInAs(p, "root", []string{"--bind-ro=" + kh + ":" + inner + "/kheaders"},
+			[]string{"sh", "-c", script, "sh", name, version, rel, inner + "/kheaders", filepath.Join("/", kmodCache, rel, id)})
+		if code != 0 {
+			fmt.Fprintf(os.Stderr, "внимание: модуль %s под ядро WSL не собрался (код %d)\n", id, code)
+		}
+	}
+	// Сборки удалённых или обновлённых модулей больше не нужны.
+	old, _ := filepath.Glob(filepath.Join(cache, "*"))
+	for _, d := range old {
+		if !keep[filepath.Base(d)] {
+			os.RemoveAll(d)
+		}
+	}
+	kos, _ := filepath.Glob(filepath.Join(cache, "*", "*.ko*"))
+	loadModules(kos)
+}
+
+// dkmsVar читает переменную из dkms.conf (это shell-файл: NAME="значение").
+func dkmsVar(conf, name string) string {
+	b, err := os.ReadFile(conf)
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(b), "\n") {
+		if v, ok := strings.CutPrefix(strings.TrimSpace(line), name+"="); ok {
+			return strings.Trim(strings.TrimSpace(v), `"'`)
+		}
+	}
+	return ""
+}
+
+// loadModules грузит модули с зависимостями из модулей самого WSL. Ядро с другим интерфейсом
+// символов модуль не примет — тогда предупреждение, запуск продолжается.
+func loadModules(kos []string) {
 	for _, ko := range kos {
-		name := strings.TrimSuffix(filepath.Base(ko), ".ko")
-		if _, err := os.Stat(filepath.Join("/sys/module", name)); err == nil {
+		name := strings.SplitN(filepath.Base(ko), ".ko", 2)[0]
+		if _, err := os.Stat(filepath.Join("/sys/module", strings.ReplaceAll(name, "-", "_"))); err == nil {
 			continue
 		}
 		if deps, err := exec.Command("modinfo", "-F", "depends", ko).Output(); err == nil {

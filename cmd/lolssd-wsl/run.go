@@ -212,12 +212,21 @@ func nspawnEnv() []string {
 // runIn — программа системы хоста без её systemd (--as-pid2), с окружением WSLg: оболочка,
 // отдельные программы, служебные шаги сеанса. extra — дополнительные аргументы nspawn.
 func runIn(p hostprofile.Profile, extra, args []string) int {
+	return runInAs(p, p.User.Name, extra, args)
+}
+
+// runInAs — то же от имени другого пользователя системы хоста (root — для DKMS).
+func runInAs(p hostprofile.Profile, user string, extra, args []string) int {
 	nspawn, err := nspawnBase(p)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	nspawn = append(nspawn, "--as-pid2", "--user="+p.User.Name, "--chdir="+p.User.Home,
+	home := p.User.Home
+	if user == "root" {
+		home = "/root"
+	}
+	nspawn = append(nspawn, "--as-pid2", "--user="+user, "--chdir="+home,
 		"--setenv=XDG_RUNTIME_DIR="+inner+"/wslg/runtime-dir",
 		"--setenv=WAYLAND_DISPLAY=wayland-0",
 		"--setenv=DISPLAY=:0",

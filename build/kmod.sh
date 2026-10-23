@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# lolssd: модули ядра для режима «Linux внутри Windows», собранные под ядро WSL.
-#   build/kmod.sh            (обычно make kmod; make wsl кладёт результат в пусковой дистрибутив)
+# lolssd: заголовки ядра WSL для сборки внешних модулей в режиме «Linux внутри Windows».
+#   build/kmod.sh            (обычно make kmod; make wsl кладёт их в пусковой дистрибутив)
 #
 # Ядро WSL общее для всех дистрибутивов и модули DKMS хоста (они собраны под его ядро) не грузит.
-# Что нужно системе хоста сверх модулей самого WSL, собирается здесь под ядро из MSI WSL в образе
-# (Windows Update выключен, так что оно не меняется):
-#   - amneziawg — VPN AmneziaVPN (исходники — DKMS хоста /usr/src/amneziawg-*).
+# Поэтому при запуске lolssd-wsl прогоняет DKMS самой системы хоста против ядра WSL (amneziawg,
+# v4l2loopback — всё, что там установлено) — для этого ей нужны заголовки этого ядра, как пакет
+# linux-headers. Ядро — из MSI WSL в образе (Windows Update выключен, так что оно не меняется).
 #
 # Дерево ядра: ванильное ядро той же версии с kernel.org и конфиг WSL из репозитория Microsoft
 # (исходники Microsoft целиком с GitHub качаются часами). Это безопасно: у ядра WSL включены
@@ -23,12 +23,12 @@ local=-microsoft-standard-WSL2
 base=${krel%.*}                          # 6.18.54 — ванильная версия
 cache=$dist/cache/kernel-$krel
 tree=$cache/linux-$base
-out=$dist/wsl/modules/$krel$local
+out=$dist/wsl/kheaders/$krel$local
 
-for t in curl tar make gcc bc flex bison perl strip; do
+for t in curl tar make gcc bc flex bison perl; do
 	command -v "$t" >/dev/null || die "нет $t"
 done
-mkdir -p "$cache" "$out"
+mkdir -p "$cache"
 
 echo "ядро WSL $krel$local"
 if [[ ! -s $tree/Module.symvers ]]; then
@@ -50,15 +50,6 @@ if [[ ! -s $tree/Module.symvers ]]; then
 	make -C "$tree" -s -j"$(nproc)"
 fi
 
-echo "amneziawg"
-src=$(ls -d /usr/src/amneziawg-* 2>/dev/null | sort -V | tail -1)
-if [[ -z $src ]]; then
-	echo "  нет /usr/src/amneziawg-* (пакет amneziawg-dkms) — модуль не собран" >&2
-else
-	work=$(mktemp -d)
-	trap 'rm -rf "$work"' EXIT
-	cp -r "$src/." "$work"
-	make -C "$tree" M="$work" -s -j"$(nproc)" modules
-	strip --strip-debug -o "$out/amneziawg.ko" "$work/amneziawg.ko"
-	echo "  $(basename "$src") → $out/amneziawg.ko"
-fi
+echo "заголовки для модулей"
+"$repo/build/kheaders.sh" "$tree" "$out"
+echo "  $out ($(du -sh "$out" | cut -f1))"
