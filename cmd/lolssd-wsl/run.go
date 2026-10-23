@@ -152,6 +152,29 @@ func devBinds() []string {
 	return binds
 }
 
+// nspawnCmd — команда systemd-nspawn. Берётся из системы хоста, если он там есть, и запускается
+// её же загрузчиком с её библиотеками (glibc пускового Debian старше): nspawn должен быть той же
+// версии, что systemd, который он загружает. Иначе, например, nspawn 257 подменяет boot ID
+// удаляемым файлом, systemd 262 не может перенести эту подмену в свежий /proc служб с песочницей,
+// и logind отклоняет вход («JSON field 'PID' refers to non-local PID»). Нет своего — Debian-овский.
+func nspawnCmd() []string {
+	bin := filepath.Join(rootDir, "usr/bin/systemd-nspawn")
+	loaders, _ := filepath.Glob(filepath.Join(rootDir, "usr/lib*/ld-linux-x86-64.so.2"))
+	if more, _ := filepath.Glob(filepath.Join(rootDir, "lib*/ld-linux-x86-64.so.2")); len(loaders) == 0 {
+		loaders = more
+	}
+	if _, err := os.Stat(bin); err != nil || len(loaders) == 0 {
+		return []string{"systemd-nspawn"}
+	}
+	var libs []string
+	for _, d := range []string{"usr/lib", "usr/lib64", "usr/lib/x86_64-linux-gnu", "usr/lib/systemd", "usr/lib64/systemd", "usr/lib/x86_64-linux-gnu/systemd"} {
+		if st, err := os.Stat(filepath.Join(rootDir, d)); err == nil && st.IsDir() {
+			libs = append(libs, filepath.Join(rootDir, d))
+		}
+	}
+	return []string{loaders[0], "--library-path", strings.Join(libs, ":"), bin}
+}
+
 // nspawnEnv — окружение для systemd-nspawn: без фильтра системных вызовов (seccomp) и с /sys,
 // /proc/sys на запись.
 func nspawnEnv() []string {
@@ -176,7 +199,8 @@ func runIn(p hostprofile.Profile, extra, args []string) int {
 		"--setenv=LOLSSD=wsl")
 	nspawn = append(append(append(nspawn, extra...), "--"), args...)
 
-	cmd := exec.Command("systemd-nspawn", nspawn...)
+	c := nspawnCmd()
+	cmd := exec.Command(c[0], append(c[1:], nspawn...)...)
 	cmd.Env = nspawnEnv()
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	return exitCode(cmd.Run())

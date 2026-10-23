@@ -57,16 +57,10 @@ func bootDesktop(p hostprofile.Profile, extra, env, command []string) (*exec.Cmd
 			return nil, err
 		}
 	}
-	// [проверить] logind в контейнере отказывает в сеансе (CreateSession: InvalidParameter) —
-	// подробный журнал logind, пока причина не найдена.
-	if err := os.MkdirAll(filepath.Join(units, "systemd-logind.service.d"), 0o755); err != nil {
-		return nil, err
-	}
 	files := map[string]string{
-		filepath.Join(units, "systemd-logind.service.d", "lolssd-debug.conf"): "[Service]\nEnvironment=SYSTEMD_LOG_LEVEL=debug\n",
-		filepath.Join(units, desktopTarget):                                   targetUnit,
-		filepath.Join(units, "lolssd-hyprland.service"):                       hyprlandUnit(p, env, command),
-		filepath.Join(run, "empty"):                                           "",
+		filepath.Join(units, desktopTarget):             targetUnit,
+		filepath.Join(units, "lolssd-hyprland.service"): hyprlandUnit(p, env, command),
+		filepath.Join(run, "empty"):                     "",
 	}
 	for path, text := range files {
 		if err := os.WriteFile(path, []byte(text), 0o644); err != nil {
@@ -85,7 +79,8 @@ func bootDesktop(p hostprofile.Profile, extra, env, command []string) (*exec.Cmd
 	}
 	nspawn = append(append(nspawn, extra...), "--", "systemd.unit="+desktopTarget)
 
-	cmd := exec.Command("systemd-nspawn", nspawn...)
+	c := nspawnCmd()
+	cmd := exec.Command(c[0], append(c[1:], nspawn...)...)
 	cmd.Env = nspawnEnv()
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 	return cmd, cmd.Start()
