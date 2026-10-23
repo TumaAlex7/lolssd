@@ -3,6 +3,7 @@
 package main
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"os"
 	"os/exec"
@@ -27,7 +28,9 @@ import (
 //     полноэкранным TigerVNC (lolssd-win desktop).
 
 const (
-	aqCache     = "/var/cache/lolssd/aquamarine" // в пусковом дистрибутиве, по версиям
+	// На диске системы хоста: переимпорт пускового дистрибутива (каждое обновление SSD) его не
+	// стирает. По версии aquamarine и хэшу патча.
+	aqCache     = "var/cache/lolssd/aquamarine"
 	aqPatch     = "/usr/local/share/lolssd/aquamarine-headless-device.patch"
 	xdgDir      = "/run/lolssd/xdg" // XDG_RUNTIME_DIR сеанса, общий с wayvnc
 	vncPort0    = 5900              // выход N — порт 5900+N
@@ -255,17 +258,20 @@ func ensureAquamarine(p hostprofile.Profile) (string, error) {
 	}
 	base := filepath.Base(libs[0])                           // libaquamarine.so.0.15.1
 	version := strings.TrimPrefix(base, "libaquamarine.so.") // 0.15.1, тег v0.15.1
-	dir := filepath.Join(aqCache, version)
+	patch, err := os.ReadFile(aqPatch)
+	if err != nil {
+		return "", fmt.Errorf("патч aquamarine: %w", err)
+	}
+	dir := filepath.Join(rootDir, aqCache, fmt.Sprintf("%s-%x", version, sha256.Sum256(patch))[:len(version)+9])
 	lib := filepath.Join(dir, "lib", base)
 	if _, err := os.Stat(lib); err == nil {
 		return lib, nil
 	}
 
-	fmt.Printf("Собираю aquamarine %s с патчем под систему хоста (один раз на версию)…\n", version)
+	fmt.Printf("Собираю aquamarine %s с патчем под систему хоста (один раз на версию и патч)…\n", version)
 	if err := os.MkdirAll(dir, 0o755); err == nil {
 		err = os.Chown(dir, p.User.UID, p.User.GID)
 	}
-	patch, err := os.ReadFile(aqPatch)
 	if err == nil {
 		err = os.WriteFile(filepath.Join(dir, "aquamarine.patch"), patch, 0o644)
 	}
