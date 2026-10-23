@@ -318,25 +318,16 @@ foreach ($d in "$env:PUBLIC\Desktop", "$env:ProgramData\Microsoft\Windows\Start 
   $l.Description = "The host's Hyprland, full screen on every monitor"
   $l.Save(); "fixed $p"
 }
-# Перезагрузка обратно в эту Windows (lolssd-setup.ps1, 'register restart task'):
-# задание и ярлык в «Пуске», если система установлена до них.
-# Задание — на самого пользователя (Interactive, Highest): такое он запускает через
-# schtasks /run без запроса UAC. На группу «Администраторы» запуск из обычного сеанса не проходил.
-$me = "$env:USERDOMAIN\$env:USERNAME"
-$t = Get-ScheduledTask -TaskPath '\lolssd\' -TaskName 'restart' -ErrorAction SilentlyContinue
-if (-not $t -or $t.Principal.UserId -ne $env:USERNAME) {
-  $a = New-ScheduledTaskAction -Execute $exe -Argument 'restart'
-  $pr = New-ScheduledTaskPrincipal -UserId $me -LogonType Interactive -RunLevel Highest
-  Register-ScheduledTask -TaskPath '\lolssd\' -TaskName 'restart' -Action $a -Principal $pr -Force | Out-Null
-  "registered task \lolssd\restart for $me"
-}
+# Перезагрузка обратно в эту Windows: ярлык ведёт в lolssd-win.exe restart (права — через UAC).
+# Задание \lolssd\restart от прежних версий больше не нужно.
+Unregister-ScheduledTask -TaskPath '\lolssd\' -TaskName 'restart' -Confirm:$false -ErrorAction SilentlyContinue
 $p = "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Restart into Windows (SSD).lnk"
-if (-not (Test-Path $p)) {
-  $l = $s.CreateShortcut($p)
-  $l.TargetPath = "$env:SystemRoot\System32\schtasks.exe"; $l.Arguments = '/run /tn \lolssd\restart'
+$l = $s.CreateShortcut($p)
+if ($l.TargetPath -ne $exe -or $l.Arguments -ne 'restart') {
+  $l.TargetPath = $exe; $l.Arguments = 'restart'
   $l.Description = 'Restart straight back into this Windows instead of the host system'
-  $l.IconLocation = "$env:SystemRoot\System32\shell32.dll,238"; $l.WindowStyle = 7
-  $l.Save(); "created $p"
+  $l.IconLocation = "$env:SystemRoot\System32\shell32.dll,238"
+  $l.Save(); "updated $p"
 }`
 	out, err := hidden(time.Minute, "powershell.exe", "-NoProfile", "-NonInteractive", "-Command",
 		script).CombinedOutput()

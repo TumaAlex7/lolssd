@@ -7,7 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"os/exec"
+
+	"golang.org/x/sys/windows"
 
 	"lolssd/efi"
 )
@@ -20,8 +23,18 @@ const (
 // restartSelf — ярлык «Restart into Windows (SSD)»: ставит BootNext на ESP этого SSD и
 // перезагружает машину. Обычная перезагрузка уводит в систему хоста: nvram-guard убирает SSD
 // из BootOrder (docs/ARCHITECTURE.md §2). BootNext действует один раз, порядок не меняется.
-// Запускается заданием \lolssd\restart с повышенными правами — без запроса UAC.
+// Переменные UEFI пишет только администратор: запущенная без прав (из ярлыка), программа
+// перезапускает себя с запросом UAC.
 func restartSelf() int {
+	if !windows.GetCurrentProcessToken().IsElevated() {
+		exe, _ := os.Executable()
+		if err := windows.ShellExecute(0, windows.StringToUTF16Ptr("runas"), windows.StringToUTF16Ptr(exe),
+			windows.StringToUTF16Ptr("restart"), nil, windows.SW_HIDE); err != nil {
+			log.Println("запуск с правами администратора:", err)
+			return 1
+		}
+		return 0
+	}
 	if err := enablePrivilege("SeSystemEnvironmentPrivilege"); err != nil {
 		log.Println("нет привилегии на переменные UEFI:", err)
 		return 1

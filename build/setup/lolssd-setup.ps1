@@ -108,17 +108,14 @@ Step 'register driver install task' {
 }
 
 # "Restart into Windows (SSD)": a plain restart boots the host's own system, because
-# nvram-guard keeps this SSD out of BootOrder. The task sets BootNext to the SSD and restarts;
-# it runs elevated without a UAC prompt, the Start menu shortcut only starts the task.
-# The task itself is registered for the logged-on user at logon (lolssd-win mount): a task
-# for a group cannot be started by a non-elevated user, and setup runs before any logon.
+# nvram-guard keeps this SSD out of BootOrder. lolssd-win restart sets BootNext to the SSD and
+# restarts; it asks for admin rights (UAC) itself.
 Step 'restart shortcut' {
     $lnk = (New-Object -ComObject WScript.Shell).CreateShortcut("$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Restart into Windows (SSD).lnk")
-    $lnk.TargetPath = "$env:SystemRoot\System32\schtasks.exe"
-    $lnk.Arguments = '/run /tn \lolssd\restart'
+    $lnk.TargetPath = "$env:ProgramFiles\lolssd\lolssd-win.exe"
+    $lnk.Arguments = 'restart'
     $lnk.Description = 'Restart straight back into this Windows instead of the host system'
     $lnk.IconLocation = "$env:SystemRoot\System32\shell32.dll,238"
-    $lnk.WindowStyle = 7
     $lnk.Save()
 }
 
