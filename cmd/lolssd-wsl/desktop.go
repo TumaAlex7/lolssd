@@ -66,9 +66,6 @@ func runHyprland(p hostprofile.Profile, wins []hostprofile.WinMonitor, n int, cf
 	extra := []string{
 		"--bind-ro=" + sessionDir + ":" + inner + "/session",
 		"--bind-ro=" + filepath.Dir(filepath.Dir(lib)) + ":" + inner + "/aq",
-		"--bind=" + card,
-		"--bind=" + render, // на нём рендерер Hyprland открывает GBM для EGL
-		"--property=DeviceAllow=char-drm rw",
 	}
 
 	// Рисует d3d12 через /dev/dxg, а если Hyprland с ним сразу падает — llvmpipe на CPU.

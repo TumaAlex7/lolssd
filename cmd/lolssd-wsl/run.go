@@ -75,11 +75,15 @@ func shell() int {
 }
 
 // nspawnBase — общая часть запуска системы хоста в systemd-nspawn: корень, привязки WSLg, GPU-PV
-// (/dev/dxg + d3d12 в Mesa хоста), общий /tmp, хук pacman. На диск хоста nspawn ничего не пишет:
-// журнал, часовой пояс и resolv.conf не копируются.
+// (/dev/dxg + d3d12 в Mesa хоста), общий /tmp, хук pacman.
+//
+// Контейнер без ограничений — система хоста должна вести себя как в виртуальной машине, а не
+// как в песочнице: все capabilities, без фильтра системных вызовов, /sys и /proc/sys на запись
+// (переменные окружения nspawn — в nspawnEnv), все устройства ВМ WSL (devBinds). Сеть общая с
+// пусковым дистрибутивом. Своё у неё только дерево процессов: PID 1 — systemd хоста (рабочий стол).
 func nspawnBase(p hostprofile.Profile) ([]string, error) {
 	nspawn := []string{
-		"--quiet", "--register=no",
+		"--quiet", "--register=no", "--capability=all",
 		// Своё имя на каждый запуск: иначе оно берётся из каталога (root), и второй запуск
 		// (оболочка при работающем рабочем столе) отказывается: «unix-export/root exists».
 		"--machine=lolssd-" + strconv.Itoa(os.Getpid()),
@@ -100,11 +104,10 @@ func nspawnBase(p hostprofile.Profile) ([]string, error) {
 		return nil, fmt.Errorf("/tmp: %w", err)
 	}
 	// Без GPU-PV (старый драйвер видеокарты, выключенный WSLg) работаем на llvmpipe.
-	if _, err := os.Stat("/dev/dxg"); err == nil {
-		nspawn = append(nspawn, "--bind=/dev/dxg", "--property=DeviceAllow=/dev/dxg rw")
-	} else {
+	if _, err := os.Stat("/dev/dxg"); err != nil {
 		fmt.Fprintln(os.Stderr, "внимание: нет /dev/dxg, графика без ускорения")
 	}
+	nspawn = append(nspawn, devBinds()...)
 	if p.Distro.ID == "arch" || strings.Contains(p.Distro.IDLike, "arch") {
 		upper := "/run/lolssd/pacman.d"
 		err := os.MkdirAll(filepath.Join(upper, "hooks"), 0o755)
@@ -120,6 +123,39 @@ func nspawnBase(p hostprofile.Profile) ([]string, error) {
 		fmt.Fprintln(os.Stderr, "внимание: для", p.Distro.ID, "обновления ядра изнутри Windows не блокируются — не обновляйте систему отсюда")
 	}
 	return nspawn, nil
+}
+
+// nspawnStd — устройства, которые nspawn создаёт в контейнере сам; остальные пробрасываются.
+var nspawnStd = map[string]bool{
+	"null": true, "zero": true, "full": true, "random": true, "urandom": true, "tty": true,
+	"console": true, "ptmx": true, "pts": true, "shm": true, "mqueue": true, "hugepages": true,
+	"fd": true, "stdin": true, "stdout": true, "stderr": true, "core": true, "log": true,
+	"initctl": true, "char": true, "block": true,
+}
+
+// devBinds — все устройства ВМ WSL для контейнера: видеокарта (dxg, dri), диски хоста,
+// device-mapper, fuse, kvm, tun и прочее, что есть в /dev пускового дистрибутива. Каталоги
+// пробрасываются целиком; консоли и терминалы (tty*) — нет, у контейнера свои.
+func devBinds() []string {
+	entries, _ := os.ReadDir("/dev")
+	var binds []string
+	for _, e := range entries {
+		name := e.Name()
+		if nspawnStd[name] || strings.HasPrefix(name, "tty") || strings.HasPrefix(name, "vcs") {
+			continue
+		}
+		if e.Type()&os.ModeSymlink != 0 {
+			continue // ссылки (fd, stdin…) nspawn создаёт сам, а цели пробрасываются как есть
+		}
+		binds = append(binds, "--bind=/dev/"+name)
+	}
+	return binds
+}
+
+// nspawnEnv — окружение для systemd-nspawn: без фильтра системных вызовов (seccomp) и с /sys,
+// /proc/sys на запись.
+func nspawnEnv() []string {
+	return append(os.Environ(), "SYSTEMD_SECCOMP=0", "SYSTEMD_NSPAWN_API_VFS_WRITABLE=yes")
 }
 
 // runIn — программа системы хоста без её systemd (--as-pid2), с окружением WSLg: оболочка,
@@ -141,6 +177,7 @@ func runIn(p hostprofile.Profile, extra, args []string) int {
 	nspawn = append(append(append(nspawn, extra...), "--"), args...)
 
 	cmd := exec.Command("systemd-nspawn", nspawn...)
+	cmd.Env = nspawnEnv()
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	return exitCode(cmd.Run())
 }

@@ -77,6 +77,7 @@ func bootDesktop(p hostprofile.Profile, extra, env, command []string) (*exec.Cmd
 	nspawn = append(append(nspawn, extra...), "--", "systemd.unit="+desktopTarget)
 
 	cmd := exec.Command("systemd-nspawn", nspawn...)
+	cmd.Env = nspawnEnv()
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 	return cmd, cmd.Start()
 }
