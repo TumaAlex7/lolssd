@@ -61,7 +61,7 @@ make test
   эту Windows (BootNext на ESP SSD; обычная перезагрузка уводит в систему хоста). Через задание
   `\lolssd\restart`, без запроса UAC.
 - `lolssd-win desktop` — ярлык «Linux desktop (host)»: Hyprland хоста в WSL и полноэкранный
-  TigerVNC на каждом мониторе. **Ctrl+Alt+F12** (или F8 → Exit viewer) отдаёт монитор под
+  TigerVNC на каждом мониторе. **Ctrl+Alt+F12** (или Ctrl+Alt+M → Exit viewer) отдаёт монитор под
   курсором Windows (например, под игру), Ctrl+Alt+F12 возвращает его Linux.
 
 ### Пусковой WSL-дистрибутив (`dist/wsl/lolssd.tar`)

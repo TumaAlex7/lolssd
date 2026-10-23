@@ -53,7 +53,7 @@ var _ [48]byte = [unsafe.Sizeof(msg{})]byte{} // MSG на amd64
 // там ход первой сборки aquamarine, пароль LUKS и ошибки. На каждый монитор Windows, как
 // только его wayvnc отвечает, открывает полноэкранный TigerVNC.
 //
-// Монитор отдают Windows, закрыв его просмотрщик (F8 → Exit viewer в TigerVNC, или
+// Монитор отдают Windows, закрыв его просмотрщик (Ctrl+Alt+M → Exit viewer в TigerVNC, или
 // Ctrl+Alt+F12, если Windows получит сочетание), и возвращают Linux сочетанием Ctrl+Alt+F12 на
 // нём: Hyprland и его выход при этом продолжают работать. Всё заканчивается, когда выходят
 // из Hyprland: тогда закрываются и просмотрщики.
