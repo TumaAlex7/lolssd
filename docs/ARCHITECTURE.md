@@ -281,11 +281,12 @@ nspawn берётся из системы хоста той же версии, �
 - маски для того, чем владеет Windows: сеть (NetworkManager и т. п.), клавиатура (keyd,
   input-remapper), console-getty.
 
-**Рисование по умолчанию — на CPU (llvmpipe)**, и Hyprland, и программы: с d3d12 браузер и Discord
-подвешивали сеанс, а в журнале ядра — отказы dxg в памяти GPU (`dxgkio_reserve_gpu_va: -75`). На CPU
-буферы — обычная память vgem, их принимает любой. `LOLSSD_GPU=1` (переменная Windows) — попытка d3d12.
+**Рисование — d3d12 через /dev/dxg**, при падении Hyprland — CPU (llvmpipe); `LOLSSD_GPU=0`
+(переменная Windows) — сразу CPU. Только CPU не годится: видео и кодирование VNC его не тянут.
+[проверить] почему браузер и Discord подвешивали сеанс на d3d12 (ошибки dxg в журнале — при старте
+WSL, к зависанию не относятся).
 
-**Программы сеанса (в режиме GPU).** Программы на Mesa (GL), Qt, GTK отдают Hyprland буферы d3d12 и работают.
+**Программы сеанса.** Программы на Mesa (GL), Qt, GTK отдают Hyprland буферы d3d12 и работают.
 Chromium и всё на Electron под d3d12 падают («unknown object, message attach», затем fatal
 signal): им нужен `--disable-gpu` (то же у hyprland-wsl). Флаг вписывается в копию их скрипта-
 запускалки, которая подменяет его только внутри контейнера (сейчас `/usr/bin/discord`).
