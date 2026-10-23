@@ -75,7 +75,7 @@ func session() int {
 	var cfg string
 	switch filepath.Ext(p.HyprConfig) {
 	case ".lua":
-		err = os.WriteFile(filepath.Join(sessionDir, "hyprland.lua"), []byte(luaWrapper(outs, n, p.HyprConfig, kbFile, plan.Chords)), 0o644)
+		err = os.WriteFile(filepath.Join(sessionDir, "hyprland.lua"), []byte(luaWrapper(outs, wins, p.HyprConfig, kbFile, plan.Chords)), 0o644)
 		cfg = inner + "/session/hyprland.lua"
 	default:
 		if len(plan.Chords) > 0 {
@@ -131,8 +131,12 @@ func mapOutputs(host []hostprofile.Monitor, wins []hostprofile.WinMonitor) []out
 // в аргументах любого вызова (на любой глубине таблиц) заменяет имена мониторов хоста:
 // порт целиком и «desc:» по префиксу, как сопоставляет сам Hyprland. Так перевод не зависит
 // от того, какие функции API принимают имя монитора. Затем подключает конфиг пользователя.
-func luaWrapper(outs []output, n int, userConfig, kbFile string, chords []keymap.Chord) string {
-	var ports, descs, chordsLua strings.Builder
+func luaWrapper(outs []output, wins []hostprofile.WinMonitor, userConfig, kbFile string, chords []keymap.Chord) string {
+	n := max(len(wins), 1)
+	var ports, descs, chordsLua, screens strings.Builder
+	for _, w := range wins {
+		fmt.Fprintf(&screens, "  { x = %d, y = %d, w = %d, h = %d },\n", w.X, w.Y, w.Width, w.Height)
+	}
 	for _, c := range chords {
 		var mods, hide []string
 		for _, m := range c.Mods {
@@ -160,6 +164,9 @@ local ports = {
 local descs = {
 ` + descs.String() + `}
 local outputs = ` + fmt.Sprint(n) + `
+-- Мониторы Windows (физические пиксели) в порядке выходов HEADLESS-1…n.
+local screens = {
+` + screens.String() + `}
 local kbFile = ` + kb + `
 -- Сочетания keyd, дающие модификатор (клавиша Copilot = LMeta+LShift+F23 → правая Meta):
 -- пока зажат trigger, считается зажатым target, а модификаторы сочетания «не видны».
@@ -231,6 +238,17 @@ overrides.bind = function(keys, action, opts)
   binds[#binds + 1] = { keys = keys, action = action, opts = opts }
 end
 
+-- Правила мониторов для наших выходов откладываются: раскладку задаёт Windows (курсор между
+-- окнами просмотрщика переводит она), а масштаб и прочее берутся из конфига пользователя.
+local pending = {}
+overrides.monitor = function(rule)
+  local r = tr(rule)
+  local n = type(r) == "table" and type(r.output) == "string" and tonumber(r.output:match("^HEADLESS%-(%d+)$"))
+  if not n then return real.monitor(r) end
+  pending[n] = pending[n] or {}
+  for k, v in pairs(r) do pending[n][k] = v end
+end
+
 hl = wrap(real, overrides)
 
 -- Первый выход Hyprland создаёт сам, остальные — по одному на монитор Windows (размеры из AQ_HEADLESS_MODES).
@@ -240,6 +258,30 @@ end)
 
 package.path = ` + luaStr(filepath.Dir(userConfig)+"/?.lua;") + ` .. package.path
 dofile(` + luaStr(userConfig) + `)
+
+-- Выходы — как мониторы в Windows: логическая позиция — сумма логических размеров мониторов
+-- левее (выше) в раскладке Windows. Масштаб из правила пользователя, без правила — 1
+-- (у выхода без экрана нет физического размера, и «auto» дал бы случайный масштаб).
+local function scaleOf(i)
+  local s = pending[i] and tonumber(pending[i].scale)
+  if not s or s <= 0 then return 1 end
+  return s
+end
+for i = 1, outputs do
+  local r = pending[i] or { mode = "preferred" }
+  r.output = "HEADLESS-" .. i
+  r.scale = scaleOf(i)
+  local s = screens[i]
+  if s then
+    local lx, ly = 0, 0
+    for j, t in ipairs(screens) do
+      if t.x + t.w <= s.x then lx = lx + t.w / scaleOf(j) end
+      if t.y + t.h <= s.y then ly = ly + t.h / scaleOf(j) end
+    end
+    r.position = string.format("%dx%d", math.floor(lx), math.floor(ly))
+  end
+  real.monitor(r)
+end
 
 -- Привязки. Зажатое сочетание приходит с лишними модификаторами (у Copilot это Shift), поэтому
 -- к привязке «SUPER + K» добавляется «SHIFT + SUPER + K», которая срабатывает при зажатом trigger.

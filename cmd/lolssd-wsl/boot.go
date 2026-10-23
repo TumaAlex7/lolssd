@@ -48,9 +48,11 @@ func bootDesktop(p hostprofile.Profile, extra, env, command []string) (*exec.Cmd
 	}
 	run := fmt.Sprintf("/run/lolssd/boot-%d", os.Getpid())
 	os.RemoveAll(run)
-	units := filepath.Join(run, "units")
-	if err := os.MkdirAll(units, 0o755); err != nil {
-		return nil, err
+	units, polkit := filepath.Join(run, "units"), filepath.Join(run, "polkit")
+	for _, d := range []string{units, polkit} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			return nil, err
+		}
 	}
 	for _, m := range hostMasks {
 		if err := os.Symlink("/dev/null", filepath.Join(units, m)); err != nil {
@@ -58,6 +60,7 @@ func bootDesktop(p hostprofile.Profile, extra, env, command []string) (*exec.Cmd
 		}
 	}
 	files := map[string]string{
+		filepath.Join(polkit, "49-lolssd.rules"):        polkitRule(p.User.Name),
 		filepath.Join(units, desktopTarget):             targetUnit,
 		filepath.Join(units, "lolssd-hyprland.service"): hyprlandUnit(p, env, command),
 		filepath.Join(run, "empty"):                     "",
@@ -70,7 +73,8 @@ func bootDesktop(p hostprofile.Profile, extra, env, command []string) (*exec.Cmd
 	nspawn = append(nspawn, "--boot", "--console=read-only",
 		// Журнал (--link-journal=no в nspawnBase) systemd хоста ведёт сам, в своём
 		// /var/log/journal на диске, как при обычной загрузке.
-		"--bind-ro="+units+":/run/systemd/system")
+		"--bind-ro="+units+":/run/systemd/system",
+		"--bind-ro="+polkit+":/run/polkit-1/rules.d")
 	// Только существующие файлы: привязка к несуществующему создала бы его на диске хоста.
 	for _, f := range []string{"etc/fstab", "etc/crypttab"} {
 		if _, err := os.Stat(filepath.Join(rootDir, f)); err == nil {
@@ -84,6 +88,16 @@ func bootDesktop(p hostprofile.Profile, extra, env, command []string) (*exec.Cmd
 	cmd.Env = nspawnEnv()
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 	return cmd, cmd.Start()
+}
+
+// polkitRule — пользователю сеанса разрешено всё, что спрашивает polkit (выключение, монтирование,
+// systemctl и т. д.). Процессы рабочего стола живут в сервисе lolssd-hyprland, а не в scope сеанса,
+// и для polkit они не «активный локальный сеанс» — без правила poweroff требовал бы пароль.
+// Только в этом режиме: правило — в /run/polkit-1/rules.d контейнера (polkit ≥ 125), на диске
+// хоста его нет.
+func polkitRule(user string) string {
+	return "// lolssd: рабочий стол хоста в Windows\npolkit.addRule(function(action, subject) {\n" +
+		"  if (subject.user == " + strconv.Quote(user) + ") return polkit.Result.YES;\n});\n"
 }
 
 const targetUnit = `[Unit]

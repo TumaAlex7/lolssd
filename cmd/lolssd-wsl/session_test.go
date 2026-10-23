@@ -46,7 +46,7 @@ hl.monitor({ output = "desc:LG Electronics LG HDR" })
 hl.workspace_rule({ workspace = "1", rule = { monitor = "eDP-1" } })
 `), 0o644)
 	wrapper := filepath.Join(dir, "wrapper.lua")
-	os.WriteFile(wrapper, []byte(luaWrapper(outs, 3, user, "", nil)), 0o644)
+	os.WriteFile(wrapper, []byte(luaWrapper(outs, []hostprofile.WinMonitor{{X: 0, Y: 0, Width: 1920, Height: 1200}, {X: 1920, Y: 0, Width: 2560, Height: 1080}, {X: -1920, Y: 0, Width: 1920, Height: 1080}}, user, "", nil)), 0o644)
 	fake := filepath.Join(dir, "fake.lua")
 	os.WriteFile(fake, []byte(`
 local log = {}
@@ -78,12 +78,14 @@ print(table.concat(log, "\n"))
 	if err != nil {
 		t.Fatal(err, string(out))
 	}
+	// Позиции — из раскладки Windows (HEADLESS-3 левее всех), масштаб — из правила, без правила 1.
 	want := `dsp.focusmonitor(HEADLESS-2)
 dsp.exec_cmd(HEADLESS-1)
-monitor({output=HEADLESS-1,scale=1.5})
 monitor({output=HDMI-A-1})
-monitor({output=HEADLESS-2})
 workspace_rule({rule={monitor=HEADLESS-1},workspace=1})
+monitor({output=HEADLESS-1,position=1920x0,scale=1.5})
+monitor({output=HEADLESS-2,position=3200x0,scale=1})
+monitor({mode=preferred,output=HEADLESS-3,position=0x0,scale=1})
 exec_cmd(hyprctl output create headless)
 exec_cmd(hyprctl output create headless)
 `
@@ -146,7 +148,7 @@ hl.bind("SUPER + SHIFT + 3", function() print("user shift 3") end)
 `), 0o644)
 	chords := []keymap.Chord{{Trigger: "F23", Target: "Super_R", TMod: "SUPER", Mods: []string{"SHIFT", "SUPER"}, Hide: []string{"Shift_L", "Super_L"}}}
 	wrapper := filepath.Join(dir, "wrapper.lua")
-	os.WriteFile(wrapper, []byte(luaWrapper(nil, 1, user, "/kb.xkb", chords)), 0o644)
+	os.WriteFile(wrapper, []byte(luaWrapper(nil, nil, user, "/kb.xkb", chords)), 0o644)
 	fake := filepath.Join(dir, "fake.lua")
 	os.WriteFile(fake, []byte(`
 local down, binds = {}, {}
@@ -163,6 +165,7 @@ hl = {
   bind = function(keys, action) binds[norm(keys)] = action end,
   dsp = { exec_cmd = function(c) return { cmd = c } end },
   config = function(c) if c.input then print("kb_file " .. c.input.kb_file) end end,
+  monitor = function() end,
   on = function() end, exec_cmd = function() end,
 }
 dofile(`+luaStr(wrapper)+`)
