@@ -87,9 +87,11 @@ cp -L /etc/resolv.conf "$r/etc/resolv.conf"
 # for user session»), и терминал висит.
 # Скачанные .deb — в кэше вне образа. Качает сам root (а не _apt из диапазона subuid), чтобы
 # файлы кэша принадлежали пользователю. Перед apt-get clean кэш отключается — он не стирается.
+# В Docker-образе Debian docker-clean стирает .deb сразу после установки — кэш остался бы пуст.
+rm -f "$r/etc/apt/apt.conf.d/docker-clean"
 mkdir -p "$r/var/cache/apt/archives"
 mount --bind "$aptcache" "$r/var/cache/apt/archives"
-apt="apt-get -o APT::Sandbox::User=root"
+apt="apt-get -o APT::Sandbox::User=root -o APT::Keep-Downloaded-Packages=true"
 chroot "$r" $apt -q update >/dev/null
 chroot "$r" env DEBIAN_FRONTEND=noninteractive $apt -qy install --no-install-recommends \
 	systemd systemd-sysv systemd-container dbus libpam-systemd \
