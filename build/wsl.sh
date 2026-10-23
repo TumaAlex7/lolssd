@@ -105,6 +105,11 @@ install -m 0644 "$repo/build/wsl/wsl.conf" "$r/etc/wsl.conf"
 install -Dm 0644 "$repo/build/hypr/aquamarine-headless-device.patch" "$r/usr/local/share/lolssd/aquamarine-headless-device.patch"
 install -Dm 0644 "$repo/build/hypr/gbm-probe.c" "$r/usr/local/share/lolssd/gbm-probe.c"
 install -Dm 0644 "$repo/build/hypr/lolssd-gbm.c" "$r/usr/local/share/lolssd/lolssd-gbm.c"
+# Модули под ядро WSL (make kmod), если собраны: их грузит lolssd-wsl перед запуском системы хоста.
+if [[ -d $dist/wsl/modules ]]; then
+	mkdir -p "$r/usr/local/lib/lolssd"
+	cp -r "$dist/wsl/modules" "$r/usr/local/lib/lolssd/modules"
+fi
 # Только dlsym и strcmp из libc: собранное здесь работает и с glibc Debian.
 mkdir -p "$r/usr/local/lib/lolssd"
 cc -shared -fPIC -O2 -o "$r/usr/local/lib/lolssd/wayvnc-wlr-only.so" "$repo/build/hypr/wayvnc-wlr-only.c"

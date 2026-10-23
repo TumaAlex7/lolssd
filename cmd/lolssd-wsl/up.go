@@ -23,6 +23,7 @@ import (
 // чисто: не в гибернации (иначе запись испортит ФС спящей системы) и без незавершённого
 // журнала ext4. Повторный вызов, когда всё уже поднято, ничего не делает.
 func up() int {
+	loadModules()
 	if mounted(rootDir) {
 		fmt.Println("система хоста уже поднята в", rootDir)
 		return 0
@@ -355,4 +356,32 @@ func mounted(dir string) bool {
 		}
 	}
 	return false
+}
+
+// loadModules грузит модули, собранные под ядро WSL (build/kmod.sh: amneziawg и т. п.), с их
+// зависимостями из модулей самого WSL. Система хоста в контейнере их сама не загрузит: её модули
+// собраны под её ядро. Ядро с другим интерфейсом символов модуль не примет — тогда предупреждение,
+// запуск продолжается.
+func loadModules() {
+	rel, err := os.ReadFile("/proc/sys/kernel/osrelease")
+	if err != nil {
+		return
+	}
+	kos, _ := filepath.Glob(filepath.Join("/usr/local/lib/lolssd/modules", strings.TrimSpace(string(rel)), "*.ko"))
+	for _, ko := range kos {
+		name := strings.TrimSuffix(filepath.Base(ko), ".ko")
+		if _, err := os.Stat(filepath.Join("/sys/module", name)); err == nil {
+			continue
+		}
+		if deps, err := exec.Command("modinfo", "-F", "depends", ko).Output(); err == nil {
+			for _, d := range strings.Split(strings.TrimSpace(string(deps)), ",") {
+				if d != "" {
+					exec.Command("modprobe", d).Run()
+				}
+			}
+		}
+		if out, err := exec.Command("insmod", ko).CombinedOutput(); err != nil {
+			fmt.Fprintf(os.Stderr, "внимание: модуль %s не загружен: %v %s\n", name, err, strings.TrimSpace(string(out)))
+		}
+	}
 }

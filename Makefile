@@ -9,7 +9,7 @@ GOFLAGS := -trimpath -ldflags=-s\ -w
 export CGO_ENABLED := 0
 
 WIN := dist/windows/C
-.PHONY: dist wsl iso test clean
+.PHONY: dist wsl kmod iso test clean
 
 dist:
 	mkdir -p dist/LOLSSD/host dist/LOLSSD/profiles "$(WIN)/Program Files/lolssd" "$(WIN)/Windows/Setup/Scripts" dist/wsl
@@ -29,6 +29,10 @@ dist:
 # при первом входе (lolssd-win mount).
 wsl: dist
 	build/wsl.sh
+
+# Модули ядра под ядро WSL (amneziawg); make wsl кладёт их в пусковой дистрибутив.
+kmod:
+	build/kmod.sh
 
 # Установочный ISO со всем внутри: make iso ISO=~/Downloads/Win11.iso [DRIVERS=~/lolssd-drivers] [EDITION="Windows 11 Pro"]
 EDITION ?= Windows 11 Home
