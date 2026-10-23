@@ -29,6 +29,16 @@ type Profile struct {
 	Swaps      []Swap    `json:"swaps"`
 	Monitors   []Monitor `json:"monitors"`
 	Keyboard   Keyboard  `json:"keyboard"`
+	VM         *VMImage  `json:"vm,omitempty"`
+}
+
+// VMImage — образ загрузки системы хоста в ВМ Hyper-V (UKI на разделе LOLSSD): её ядро, initramfs
+// с драйверами Hyper-V и командная строка с корнем по UUID. Ядро в образе должно совпадать с
+// модулями системы: после обновления ядра на хосте профиль снимают заново.
+type VMImage struct {
+	Path    string `json:"path"`    // относительно раздела LOLSSD, например vm/<machine-id>.efi
+	Kernel  string `json:"kernel"`  // uname -r
+	Cmdline string `json:"cmdline"` // встроенная командная строка
 }
 
 // Keyboard — раскладка (RMLVO композитора) и конфиги keyd как есть: разбирает их пакет keymap

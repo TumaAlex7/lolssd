@@ -104,12 +104,18 @@ func runProfile() int {
 	p.Monitors = hostMonitors()
 	p.Keyboard = hostKeyboard()
 
+	dir, dirErr := lolssdDir()
+	if dirErr == nil {
+		if p.VM, err = buildVMImage(dir); err != nil {
+			fmt.Fprintln(os.Stderr, "внимание: образ для ВМ не собран:", err)
+		}
+	}
+
 	out, _ := json.MarshalIndent(p, "", "  ")
 	out = append(out, '\n')
 
-	dir, err := lolssdDir()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "lolssd запущен не с раздела %s (%v), профиль выведен в stdout\n", partLabel, err)
+	if dirErr != nil {
+		fmt.Fprintf(os.Stderr, "lolssd запущен не с раздела %s (%v), профиль выведен в stdout\n", partLabel, dirErr)
 		os.Stdout.Write(out)
 		return 0
 	}
@@ -126,11 +132,14 @@ func runProfile() int {
 		fmt.Printf("  %-12s %-6s %s\n", m.Target, m.FSType, describe(m.Device))
 	}
 	plan := keymap.Build(keymap.ParseKeyd(p.Keyboard.Keyd))
-	if len(plan.Chords) > 0 || len(plan.Scancodes) > 2 {
-		fmt.Printf("  переназначения клавиш keyd: %d в Windows, сочетаний для Hyprland: %d\n", len(plan.Scancodes)-2, len(plan.Chords))
+	if len(plan.Chords) > 0 || len(plan.Scancodes) > 0 {
+		fmt.Printf("  переназначения клавиш keyd: %d в Windows, сочетаний для Hyprland: %d\n", len(plan.Scancodes), len(plan.Chords))
 	}
 	for _, n := range plan.Notes {
 		fmt.Println("  не переносится в Windows:", n)
+	}
+	if p.VM != nil {
+		fmt.Printf("  образ для ВМ: %s (ядро %s)\n", filepath.Join(dir, p.VM.Path), p.VM.Kernel)
 	}
 	if !p.MesaD3D12 {
 		fmt.Println("  внимание: в Mesa нет драйвера d3d12, внутри Windows графика будет без ускорения")
