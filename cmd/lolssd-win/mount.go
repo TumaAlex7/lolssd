@@ -290,7 +290,20 @@ func ensureDistro() {
 			log.Println("lolssd.tar обновлён, пусковой дистрибутив импортируется заново")
 		}
 	}
-	if out, err := wsl(10*time.Minute, "--import", "lolssd", filepath.Join(dir, "distro"), tar); err != nil {
+	distro := filepath.Join(dir, "distro")
+	out, err := wsl(10*time.Minute, "--import", "lolssd", distro, tar)
+	if err != nil && strings.Contains(out, "E_ILLEGAL_STATE_CHANGE") {
+		// Прошлый импорт оборвался (например, перезагрузкой), и WSL помнит дистрибутив как
+		// «устанавливается»: такой в wsl --list не виден, а импорт отклоняется. Снимаем запись,
+		// убираем недоделанный диск и импортируем заново.
+		log.Println("прошлый импорт lolssd не завершён, удаляю его и импортирую заново")
+		if out, err := wsl(5*time.Minute, "--unregister", "lolssd"); err != nil {
+			log.Printf("wsl --unregister lolssd: %v: %s", err, out)
+		}
+		os.RemoveAll(distro)
+		out, err = wsl(10*time.Minute, "--import", "lolssd", distro, tar)
+	}
+	if err != nil {
 		if strings.Contains(out, "ALREADY_EXISTS") {
 			log.Println("пусковой дистрибутив уже есть, но в wsl --list его не было")
 			return
