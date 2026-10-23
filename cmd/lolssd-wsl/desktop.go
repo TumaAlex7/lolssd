@@ -265,6 +265,7 @@ func ensureAquamarine(p hostprofile.Profile) (string, error) {
 	dir := filepath.Join(rootDir, aqCache, fmt.Sprintf("%s-%x", version, sha256.Sum256(patch))[:len(version)+9])
 	lib := filepath.Join(dir, "lib", base)
 	if _, err := os.Stat(lib); err == nil {
+		pruneAquamarine(dir)
 		return lib, nil
 	}
 
@@ -300,7 +301,18 @@ rm -rf "$src"`
 	if _, err := os.Stat(lib); code != 0 || err != nil {
 		return "", fmt.Errorf("сборка aquamarine %s не удалась (код %d)", version, code)
 	}
+	pruneAquamarine(dir)
 	return lib, nil
+}
+
+// pruneAquamarine удаляет из кэша сборки других версий aquamarine и патча: нужна только текущая.
+func pruneAquamarine(keep string) {
+	old, _ := filepath.Glob(filepath.Join(filepath.Dir(keep), "*"))
+	for _, d := range old {
+		if d != keep {
+			os.RemoveAll(d)
+		}
+	}
 }
 
 // serveVNC ждёт сокет Hyprland и выходы HEADLESS-1…n и держит на каждом по wayvnc,
