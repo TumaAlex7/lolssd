@@ -56,7 +56,6 @@ func runHyprland(p hostprofile.Profile, wins []hostprofile.WinMonitor, n int, cf
 		return 1
 	}
 
-	userRun := fmt.Sprintf("/run/user/%d", p.User.UID)
 	var modes []string
 	for _, w := range wins {
 		modes = append(modes, fmt.Sprintf("%dx%d", w.Width, w.Height))
@@ -67,7 +66,6 @@ func runHyprland(p hostprofile.Profile, wins []hostprofile.WinMonitor, n int, cf
 	extra := []string{
 		"--bind-ro=" + sessionDir + ":" + inner + "/session",
 		"--bind-ro=" + filepath.Dir(filepath.Dir(lib)) + ":" + inner + "/aq",
-		"--bind=" + xdgDir + ":" + userRun,
 		"--bind=" + card,
 		"--bind=" + render, // на нём рендерер Hyprland открывает GBM для EGL
 		"--property=DeviceAllow=char-drm rw",
@@ -88,48 +86,55 @@ func runHyprland(p hostprofile.Profile, wins []hostprofile.WinMonitor, n int, cf
 			fmt.Fprintln(os.Stderr, "нет /usr/lib/wsl в системе хоста, рисую на CPU:", err)
 		}
 	}
+	// Управляющие сокеты wayvnc — в пусковом дистрибутиве.
+	os.RemoveAll(xdgDir)
+	if err := os.MkdirAll(xdgDir, 0o700); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+
 	code := 1
 	for i, driver := range drivers {
-		// Свой XDG_RUNTIME_DIR, короткий: путь к сокету Hyprland ограничен 108 байтами
-		// (с /run/lolssd-wsl/wslg/runtime-dir/hypr/<подпись>/ он не влезал), и его видит wayvnc.
-		os.RemoveAll(xdgDir)
-		if err := os.MkdirAll(xdgDir, 0o700); err == nil {
-			err = os.Chown(xdgDir, p.User.UID, p.User.GID)
-		}
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "XDG_RUNTIME_DIR:", err)
-			return 1
-		}
-		// Без WAYLAND_DISPLAY aquamarine не пытается встать окном в WSLg и берёт headless-бэкенд.
-		cmd := []string{"env", "-u", "WAYLAND_DISPLAY", "-u", "DISPLAY", driver, "LP_NUM_THREADS=4",
-			"XDG_RUNTIME_DIR=" + userRun,
+		env := []string{driver, "LP_NUM_THREADS=4",
 			"AQ_HEADLESS_DRM_DEVICE=" + card,
 			"AQ_HEADLESS_MODES=" + strings.Join(modes, ","),
 			"LD_LIBRARY_PATH=" + aqLibIn + ":" + inner + "/lib/lib"}
-		env := cmd
-		// Своя сессионная шина D-Bus на весь сеанс, как при обычном входе: без неё waybar, трей,
-		// уведомления и прочее падают или работают с ошибками («Cannot autolaunch D-Bus»).
-		if _, err := os.Stat(filepath.Join(rootDir, "usr/bin/dbus-run-session")); err == nil {
-			cmd = append(cmd, "dbus-run-session", "--")
-		}
-		// Построчно: иначе вывод в канал буферизуется и при падении теряется.
-		if _, err := os.Stat(filepath.Join(rootDir, "usr/bin/stdbuf")); err == nil {
-			cmd = append(cmd, "stdbuf", "-oL", "-eL")
-		}
 		// Через start-hyprland, как задумано в Hyprland ≥ 0.53 (иначе он предупреждает в углу
-		// экрана): сторожевой процесс, который следит за Hyprland. Код выхода его же.
+		// экрана): сторожевой процесс, который следит за Hyprland. Построчный вывод (stdbuf):
+		// иначе при падении он теряется.
+		var command []string
+		if _, err := os.Stat(filepath.Join(rootDir, "usr/bin/stdbuf")); err == nil {
+			command = append(command, "/usr/bin/stdbuf", "-oL", "-eL")
+		}
 		if _, err := os.Stat(filepath.Join(rootDir, "usr/bin/start-hyprland")); err == nil {
-			cmd = append(cmd, "start-hyprland", "--", "--config", cfg)
+			command = append(command, "/usr/bin/start-hyprland", "--", "--config", cfg)
 		} else {
-			cmd = append(cmd, "Hyprland", "--config", cfg)
+			command = append(command, "/usr/bin/Hyprland", "--config", cfg)
 		}
 		name := strings.TrimPrefix(driver, "GALLIUM_DRIVER=")
 
+		fmt.Printf("Hyprland (%s): %s на %s, выходов %d, VNC на 127.0.0.1:%d…%d\n",
+			driver, strings.Join(modes, ","), card, n, vncPort0+1, vncPort0+n)
+		began := time.Now()
+		ns, err := bootDesktop(p, extra, env, command)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "запуск системы хоста:", err)
+			return 1
+		}
+		// Сеанс logind: /run/user/UID — в /run контейнера, оттуда его видят wayvnc и копия журнала.
+		runtime := ""
+		if pid, err := containerInit(ns.Process.Pid); err == nil {
+			runtime = fmt.Sprintf("/proc/%d/root/run/user/%d", pid, p.User.UID)
+		} else {
+			fmt.Fprintln(os.Stderr, err)
+		}
 		stop := make(chan struct{})
 		done := make(chan struct{})
 		go func() {
 			defer close(done)
-			serveVNC(n, stop)
+			if runtime != "" {
+				serveVNC(n, runtime, stop)
+			}
 		}()
 		// Журнал Hyprland копируется на ходу: при выходе Hyprland удаляет его вместе с каталогом.
 		go func() {
@@ -138,22 +143,18 @@ func runHyprland(p hostprofile.Profile, wins []hostprofile.WinMonitor, n int, cf
 				case <-stop:
 					return
 				case <-time.After(2 * time.Second):
-					copyHyprLog(name)
+					copyHyprLog(runtime, name)
 				}
 			}
 		}()
-		fmt.Printf("Hyprland (%s): %s на %s, выходов %d, VNC на 127.0.0.1:%d…%d\n",
-			driver, strings.Join(modes, ","), card, n, vncPort0+1, vncPort0+n)
-		began := time.Now()
-		code = runIn(p, extra, cmd)
+		code = exitCode(ns.Wait())
 		close(stop)
 		<-done
-		copyHyprLog(name)
 		saveCrashReport(p, name, began)
-		if code == 0 || time.Since(began) > 20*time.Second {
+		if code == 0 || time.Since(began) > 30*time.Second {
 			break
 		}
-		gbmProbe(p, extra, env, card)
+		gbmProbe(p, extra, append([]string{"env"}, env...), card)
 		if i == len(drivers)-1 {
 			break
 		}
@@ -166,8 +167,11 @@ const logDir = "/mnt/c/ProgramData/lolssd/" // рядом с session.log, чит
 
 // copyHyprLog копирует журнал Hyprland (он в XDG_RUNTIME_DIR сеанса, в памяти) в
 // hyprland-<драйвер>.log. Пустой не копируется: последняя удачная копия ценнее.
-func copyHyprLog(driver string) {
-	logs, _ := filepath.Glob(filepath.Join(xdgDir, "hypr", "*", "hyprland.log"))
+func copyHyprLog(runtime, driver string) {
+	if runtime == "" {
+		return
+	}
+	logs, _ := filepath.Glob(filepath.Join(runtime, "hypr", "*", "hyprland.log"))
 	if len(logs) == 0 {
 		return
 	}
@@ -299,7 +303,7 @@ rm -rf "$src"`
 // serveVNC ждёт сокет Hyprland и выходы HEADLESS-1…n и держит на каждом по wayvnc,
 // пока не закроют stop. wayvnc работает в пусковом дистрибутиве и подключается к сокету
 // Hyprland через общий XDG_RUNTIME_DIR.
-func serveVNC(n int, stop chan struct{}) {
+func serveVNC(n int, runtime string, stop chan struct{}) {
 	var socket string
 	for socket == "" {
 		select {
@@ -307,10 +311,10 @@ func serveVNC(n int, stop chan struct{}) {
 			return
 		case <-time.After(300 * time.Millisecond):
 		}
-		matches, _ := filepath.Glob(filepath.Join(xdgDir, "wayland-*"))
+		matches, _ := filepath.Glob(filepath.Join(runtime, "wayland-*"))
 		for _, m := range matches {
 			if !strings.HasSuffix(m, ".lock") {
-				socket = filepath.Base(m)
+				socket = m // полный путь: libwayland принимает его в WAYLAND_DISPLAY
 			}
 		}
 	}
