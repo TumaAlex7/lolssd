@@ -25,7 +25,7 @@ cache=$dist/cache/kernel-$krel
 tree=$cache/linux-$base
 out=$dist/wsl/modules/$krel$local
 
-for t in curl tar make gcc bc flex bison perl; do
+for t in curl tar make gcc bc flex bison perl strip; do
 	command -v "$t" >/dev/null || die "нет $t"
 done
 mkdir -p "$cache" "$out"
@@ -59,6 +59,6 @@ else
 	trap 'rm -rf "$work"' EXIT
 	cp -r "$src/." "$work"
 	make -C "$tree" M="$work" -s -j"$(nproc)" modules
-	install -m 0644 "$work/amneziawg.ko" "$out/amneziawg.ko"
+	strip --strip-debug -o "$out/amneziawg.ko" "$work/amneziawg.ko"
 	echo "  $(basename "$src") → $out/amneziawg.ko"
 fi
