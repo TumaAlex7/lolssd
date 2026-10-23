@@ -97,7 +97,7 @@ rc=$(cat /run/lolssd-rc); [ "$rc" = 0 ] || { echo; echo "Ошибка (код $r
 	log.Printf("сеанс запущен, мониторов %d", len(mons))
 
 	if r, _, err := procRegisterHotKey.Call(0, hotkeyToggle, modControl|modAlt|modNoRepeat, vkF12); r == 0 {
-		log.Println("RegisterHotKey Ctrl+Alt+F12:", err) // не мешает: остаётся F8 в TigerVNC
+		log.Println("RegisterHotKey Ctrl+Alt+F12:", err) // не мешает: остаётся Ctrl+Alt+M в TigerVNC
 	}
 	procSetTimer.Call(0, 0, 500, 0)
 
