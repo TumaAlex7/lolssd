@@ -22,7 +22,9 @@ func ViewerArgs(m hostprofile.WinMonitor, i int) []string {
 		// Канал локальный: без автоподбора и JPEG — Tight без потерь, полный цвет, слабый zlib
 		// (меньше работы процессору на обеих сторонах).
 		"-AutoSelect=0", "-PreferredEncoding=Tight", "-NoJPEG=1", "-FullColor=1", "-CompressLevel=1",
-		"-SecurityTypes=None", "-AlertOnFatalError=0", "-Log=*:stderr:30",
+		"-SecurityTypes=None", "-AlertOnFatalError=0", "-MenuKey=F8",
+		// Viewport:100 — каждое нажатие клавиши и во что оно превратилось (проверка клавиши меню).
+		"-Log=*:stderr:30,Viewport:stderr:100",
 		fmt.Sprintf("-geometry=640x480+%d+%d", m.X+m.Width/4, m.Y+m.Height/4),
 		fmt.Sprintf("127.0.0.1::%d", VNCPort(i)),
 	}
