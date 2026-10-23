@@ -41,9 +41,9 @@ if [[ ! -s $tree/Module.symvers ]]; then
 	tar -xf "$tarball" -C "$cache"
 	sed -i "s/^EXTRAVERSION =.*/EXTRAVERSION = .${krel##*.}/" "$tree/Makefile"
 	cp "$config" "$tree/.config"
-	# Отладочные сведения и BTF на версии символов не влияют, а сборку замедляют.
-	"$tree/scripts/config" --file "$tree/.config" --disable DEBUG_INFO_BTF --disable DEBUG_INFO_BTF_MODULES \
-		--disable DEBUG_INFO --enable DEBUG_INFO_NONE
+	# Конфиг — ровно как у WSL. Даже «безобидные» опции меняют интерфейс для модулей: без
+	# DEBUG_INFO_BTF_MODULES у struct module другой размер, и ядро отказывает («.gnu.linkonce.
+	# this_module section size must match»).
 	make -C "$tree" -s olddefconfig
 	[[ $(make -C "$tree" -s kernelrelease) == "$krel$local" ]] || die "kernelrelease не $krel$local"
 	echo "  сборка дерева ядра (один раз на версию, несколько минут)…"

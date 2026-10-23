@@ -104,7 +104,6 @@ install -m 0755 "$dist/wsl/lolssd-wsl" "$r/usr/local/bin/lolssd-wsl"
 install -m 0644 "$repo/build/wsl/wsl.conf" "$r/etc/wsl.conf"
 install -Dm 0644 "$repo/build/hypr/aquamarine-headless-device.patch" "$r/usr/local/share/lolssd/aquamarine-headless-device.patch"
 install -Dm 0644 "$repo/build/hypr/gbm-probe.c" "$r/usr/local/share/lolssd/gbm-probe.c"
-install -Dm 0644 "$repo/build/hypr/lolssd-gbm.c" "$r/usr/local/share/lolssd/lolssd-gbm.c"
 # Заголовки ядра WSL (make kmod), если собраны: по ним lolssd-wsl собирает DKMS-модули хоста.
 if [[ -d $dist/wsl/kheaders ]]; then
 	mkdir -p "$r/usr/local/lib/lolssd"
