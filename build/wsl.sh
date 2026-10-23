@@ -87,6 +87,7 @@ cp -L /etc/resolv.conf "$r/etc/resolv.conf"
 # for user session»), и терминал висит.
 # Скачанные .deb — в кэше вне образа. Качает сам root (а не _apt из диапазона subuid), чтобы
 # файлы кэша принадлежали пользователю. Перед apt-get clean кэш отключается — он не стирается.
+mkdir -p "$r/var/cache/apt/archives"
 mount --bind "$aptcache" "$r/var/cache/apt/archives"
 apt="apt-get -o APT::Sandbox::User=root"
 chroot "$r" $apt -q update >/dev/null
