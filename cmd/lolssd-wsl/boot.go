@@ -109,6 +109,12 @@ StandardOutput=journal+console
 StandardError=journal+console
 Environment=XDG_SESSION_TYPE=wayland XDG_SESSION_CLASS=user XDG_CURRENT_DESKTOP=Hyprland LOLSSD=wsl
 `)
+	// Сеанс из сервиса без терминала pam_systemd записывает в класс background, а такому
+	// XDG_RUNTIME_DIR не выдаётся («XDG_RUNTIME_DIR is not set!»). Поэтому менеджер пользователя
+	// (и с ним /run/user/UID) запускается явно, от root (+), а окружение задаётся прямо.
+	uid := strconv.Itoa(p.User.UID)
+	b.WriteString("ExecStartPre=+/usr/bin/systemctl start user@" + uid + ".service\n")
+	b.WriteString("Environment=XDG_RUNTIME_DIR=/run/user/" + uid + " DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/" + uid + "/bus\n")
 	for _, e := range env {
 		b.WriteString("Environment=" + strconv.Quote(e) + "\n")
 	}
