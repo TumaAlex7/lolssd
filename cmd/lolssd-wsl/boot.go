@@ -116,13 +116,11 @@ TTYReset=no
 TTYVHangup=no
 Environment=XDG_SESSION_TYPE=wayland XDG_SESSION_CLASS=user XDG_CURRENT_DESKTOP=Hyprland LOLSSD=wsl
 `)
-	// Сеанс без терминала pam_systemd записывает в класс background: без XDG_RUNTIME_DIR («is
-	// not set!») и не активный для polkit. Поэтому у сервиса есть терминал — консоль контейнера,
-	// как tty1 при входе на железе, — и сеанс получает класс user. Менеджер пользователя (и с ним
-	// /run/user/UID) на всякий случай запускается и явно, от root (+), окружение задаётся прямо.
-	uid := strconv.Itoa(p.User.UID)
-	b.WriteString("ExecStartPre=+/usr/bin/systemctl start user@" + uid + ".service\n")
-	b.WriteString("Environment=XDG_RUNTIME_DIR=/run/user/" + uid + " DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/" + uid + "/bus\n")
+	// Сеанс без терминала pam_systemd записывает в класс background: без XDG_RUNTIME_DIR и не
+	// активный для polkit. Поэтому у сервиса есть терминал — консоль контейнера, как tty1 при входе
+	// на железе: сеанс получает класс user, и logind сам поднимает /run/user/UID и user@UID.
+	// Запускать user@UID вручную нельзя: до сеанса его pam_systemd получает от logind отказ
+	// (CreateSession: InvalidParameter), и падал бы весь вход.
 	for _, e := range env {
 		b.WriteString("Environment=" + strconv.Quote(e) + "\n")
 	}
