@@ -23,9 +23,10 @@ func ViewerArgs(m hostprofile.WinMonitor, i int) []string {
 		// (меньше работы процессору на обеих сторонах).
 		"-AutoSelect=0", "-PreferredEncoding=Tight", "-NoJPEG=1", "-FullColor=1", "-CompressLevel=1",
 		// Меню просмотрщика — сочетание ShortcutModifiers (по умолчанию Ctrl+Alt) + M; клавиши F8
-		// в TigerVNC 1.16 больше нет. Viewport:100 — каждое нажатие клавиши в журнале.
+		// в TigerVNC 1.16 больше нет. CConnection:100 — каждое отправленное нажатие (скан-код и символ),
+		// KeyboardWin32 — разбор клавиш Windows, DesktopWindow — захват клавиатуры (Win и т. п.).
 		"-SecurityTypes=None", "-AlertOnFatalError=0",
-		"-Log=*:stderr:30,Viewport:stderr:100",
+		"-Log=*:stderr:30,Viewport:stderr:100,CConnection:stderr:100,KeyboardWin32:stderr:100,DesktopWindow:stderr:100",
 		fmt.Sprintf("-geometry=640x480+%d+%d", m.X+m.Width/4, m.Y+m.Height/4),
 		fmt.Sprintf("127.0.0.1::%d", VNCPort(i)),
 	}
