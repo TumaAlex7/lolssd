@@ -26,14 +26,17 @@ import (
 //     аварийный режим;
 //   - NetworkManager, networkd, iwd, wpa_supplicant замаскированы: сетью WSL владеет Windows
 //     (в режиме mirrored это её же адаптеры);
-//   - graphical.target (дисплейный менеджер) не загружается — его роль играет lolssd-hyprland.
+//   - graphical.target (дисплейный менеджер) не загружается, а console-getty замаскирован —
+//     вход на консоли делает lolssd-hyprland, как на tty1.
 // Обновления ядра блокирует хук pacman (nspawnBase).
 
 const desktopTarget = "lolssd-desktop.target"
 
 var hostMasks = []string{"NetworkManager.service", "NetworkManager-wait-online.service",
 	"systemd-networkd.service", "systemd-networkd.socket", "systemd-networkd-wait-online.service",
-	"iwd.service", "wpa_supplicant.service"}
+	"iwd.service", "wpa_supplicant.service",
+	// Приглашение входа на консоли контейнера: консоль занимает сеанс Hyprland (как tty1).
+	"console-getty.service"}
 
 // bootDesktop запускает контейнер с systemd хоста, в котором сервис lolssd-hyprland от имени
 // пользователя выполняет command с окружением env. Контейнер завершается вместе с ним и с его
@@ -89,8 +92,8 @@ After=multi-user.target
 AllowIsolate=yes
 `
 
-// hyprlandUnit — сервис сеанса: вход через PAM (login), как у дисплейного менеджера, поэтому
-// logind регистрирует сеанс и запускает user@UID. Выход Hyprland завершает контейнер с его кодом.
+// hyprlandUnit — сервис сеанса: вход через PAM (login) на консоли контейнера, как вход на tty1,
+// поэтому logind регистрирует обычный сеанс пользователя и запускает user@UID. Выход Hyprland завершает контейнер с его кодом.
 func hyprlandUnit(p hostprofile.Profile, env, command []string) string {
 	var b strings.Builder
 	b.WriteString(`[Unit]
@@ -105,13 +108,18 @@ Type=simple
 User=` + p.User.Name + `
 PAMName=login
 WorkingDirectory=~
+TTYPath=/dev/console
+StandardInput=tty
 StandardOutput=journal+console
 StandardError=journal+console
+TTYReset=no
+TTYVHangup=no
 Environment=XDG_SESSION_TYPE=wayland XDG_SESSION_CLASS=user XDG_CURRENT_DESKTOP=Hyprland LOLSSD=wsl
 `)
-	// Сеанс из сервиса без терминала pam_systemd записывает в класс background, а такому
-	// XDG_RUNTIME_DIR не выдаётся («XDG_RUNTIME_DIR is not set!»). Поэтому менеджер пользователя
-	// (и с ним /run/user/UID) запускается явно, от root (+), а окружение задаётся прямо.
+	// Сеанс без терминала pam_systemd записывает в класс background: без XDG_RUNTIME_DIR («is
+	// not set!») и не активный для polkit. Поэтому у сервиса есть терминал — консоль контейнера,
+	// как tty1 при входе на железе, — и сеанс получает класс user. Менеджер пользователя (и с ним
+	// /run/user/UID) на всякий случай запускается и явно, от root (+), окружение задаётся прямо.
 	uid := strconv.Itoa(p.User.UID)
 	b.WriteString("ExecStartPre=+/usr/bin/systemctl start user@" + uid + ".service\n")
 	b.WriteString("Environment=XDG_RUNTIME_DIR=/run/user/" + uid + " DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/" + uid + "/bus\n")
