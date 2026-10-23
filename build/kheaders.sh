@@ -10,7 +10,7 @@ rm -rf "$out"
 mkdir -p "$out"
 cd "$tree"
 
-install -Dt "$out" -m644 .config Makefile Module.symvers System.map
+install -Dt "$out" -m644 .config Makefile Module.symvers
 cp -t "$out" -a localversion.* 2>/dev/null || true
 install -Dt "$out/kernel" -m644 kernel/Makefile
 install -Dt "$out/arch/x86" -m644 arch/x86/Makefile
