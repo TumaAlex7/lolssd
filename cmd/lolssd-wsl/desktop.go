@@ -76,8 +76,11 @@ func runHyprland(p hostprofile.Profile, wins []hostprofile.WinMonitor, n int, cf
 	extra = append(extra, gpuOffLaunchers()...)
 
 	// Рисует d3d12 через /dev/dxg, а если Hyprland с ним сразу падает — llvmpipe на CPU.
+	// По умолчанию рисует CPU (llvmpipe): с d3d12 браузер и Discord подвешивали сеанс, в журнале
+	// ядра — отказы dxg в памяти GPU (dxgkio_reserve_gpu_va: -75). LOLSSD_GPU=1 (переменная Windows,
+	// через WSLENV) — сначала d3d12 через /dev/dxg, при падении CPU.
 	drivers := []string{"GALLIUM_DRIVER=llvmpipe"}
-	if _, err := os.Stat("/dev/dxg"); err == nil {
+	if _, err := os.Stat("/dev/dxg"); err == nil && os.Getenv("LOLSSD_GPU") == "1" {
 		// d3d12 (libdxcore) ищет драйвер видеокарты Windows по жёсткому пути /usr/lib/wsl/drivers,
 		// поэтому /usr/lib/wsl подключается по тому же пути — только в этом режиме, графика есть
 		// только у рабочего стола. Точка подключения — пустой каталог на диске хоста: создаётся

@@ -3,6 +3,7 @@
 package main
 
 import (
+	"crypto/sha256"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -386,7 +387,14 @@ func hostModules() {
 	if err != nil {
 		return
 	}
-	cache := filepath.Join(rootDir, kmodCache, rel)
+	// Сборка годится только для этих заголовков: отпечаток их Module.symvers и .config — в имени
+	// каталога кэша (иначе после обновления заголовков грузилась старая сборка, и ядро её отвергало).
+	h := sha256.New()
+	for _, f := range []string{"Module.symvers", ".config"} {
+		b, _ := os.ReadFile(filepath.Join(kh, f))
+		h.Write(b)
+	}
+	cache := filepath.Join(rootDir, kmodCache, rel+"-"+fmt.Sprintf("%x", h.Sum(nil))[:12])
 	confs, _ := filepath.Glob(filepath.Join(rootDir, "usr/src/*/dkms.conf"))
 	keep := map[string]bool{}
 	for _, conf := range confs {
@@ -407,12 +415,18 @@ if [ $r = 0 ]; then mkdir -p "$5" && find /var/lib/dkms/"$1"/"$2"/"$3" -name '*.
 dkms remove -m "$1" -v "$2" -k "$3" >/dev/null 2>&1
 exit $r`
 		code := runInAs(p, "root", []string{"--bind-ro=" + kh + ":" + inner + "/kheaders"},
-			[]string{"sh", "-c", script, "sh", name, version, rel, inner + "/kheaders", filepath.Join("/", kmodCache, rel, id)})
+			[]string{"sh", "-c", script, "sh", name, version, rel, inner + "/kheaders", filepath.Join("/", kmodCache, filepath.Base(cache), id)})
 		if code != 0 {
 			fmt.Fprintf(os.Stderr, "внимание: модуль %s под ядро WSL не собрался (код %d)\n", id, code)
 		}
 	}
-	// Сборки удалённых или обновлённых модулей больше не нужны.
+	// Сборки под другие заголовки и сборки удалённых или обновлённых модулей больше не нужны.
+	others, _ := filepath.Glob(filepath.Join(rootDir, kmodCache, "*"))
+	for _, d := range others {
+		if d != cache {
+			os.RemoveAll(d)
+		}
+	}
 	old, _ := filepath.Glob(filepath.Join(cache, "*"))
 	for _, d := range old {
 		if !keep[filepath.Base(d)] {

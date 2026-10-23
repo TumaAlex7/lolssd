@@ -86,7 +86,7 @@ func desktop() int {
 { /usr/local/bin/lolssd-wsl session; echo $? >/run/lolssd-rc; } 2>&1 | tee /mnt/c/ProgramData/lolssd/session.log
 rc=$(cat /run/lolssd-rc); [ "$rc" = 0 ] || { echo; echo "Ошибка (код $rc), вывод в C:\\ProgramData\\lolssd\\session.log. Enter — закрыть"; read x; }`
 	os.Setenv("LOLSSD_MONITORS", string(monsJSON))
-	os.Setenv("WSLENV", os.Getenv("WSLENV")+":LOLSSD_MONITORS")
+	os.Setenv("WSLENV", os.Getenv("WSLENV")+":LOLSSD_MONITORS:LOLSSD_GPU")
 	sess, err := startConsole("wsl.exe", "-d", "lolssd", "-u", "root", "--", "/bin/sh", "-c", script)
 	if err != nil {
 		log.Println("wsl.exe:", err)
