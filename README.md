@@ -58,8 +58,8 @@ make test
   (`lolssd profile`), подключает диски хоста в WSL для режима «Linux внутри Windows».
   Нет профиля — ничего не делает.
 - `lolssd-win restart` — ярлык «Restart into Windows (SSD)» в «Пуске»: перезагрузка сразу снова в
-  эту Windows (BootNext на ESP SSD; обычная перезагрузка уводит в систему хоста). Через задание
-  `\lolssd\restart`, без запроса UAC.
+  эту Windows (BootNext на ESP SSD; обычная перезагрузка уводит в систему хоста). Права
+  администратора — через запрос UAC.
 - `lolssd-win desktop` — ярлык «Linux desktop (host)»: Hyprland хоста в WSL и полноэкранный
   TigerVNC на каждом мониторе. **Ctrl+Alt+F12** (или Ctrl+Alt+M → Exit viewer) отдаёт монитор под
   курсором Windows (например, под игру), Ctrl+Alt+F12 возвращает его Linux.
