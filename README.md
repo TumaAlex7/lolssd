@@ -85,6 +85,22 @@ sh /run/media/$USER/LOLSSD/lolssd.sh profile       # один раз: подго
 больше ~30 кадров в секунду, программ на hyprtoolkit (hyprpaper при смене обоев). Подробно —
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), §6–7.
 
+## Сервер: Windows со Sunshine
+
+Тот же образ без ВМ с Linux, но со Sunshine — чтобы играть с сервера через Moonlight. Собирается
+здесь целиком, на сервер не нужно ставить ничего:
+
+```
+build/server-image.sh ~/Downloads/Win11.iso ["Windows 11 Pro"]   # dist/server: образ и write.sh
+```
+
+Скрипт кладёт в образ драйвер NVIDIA для GTX 10 и ставит Windows в файл-образ в QEMU, без
+вопросов. На сервере — `sudo sh write.sh /dev/sdX` (диск будет стёрт, разделы на нём не должны
+быть смонтированы), затем `sudo mount /dev/sdX2 /mnt && sudo sh /mnt/lolssd.sh boot` —
+загрузиться в Windows один раз; выключение или перезагрузка Windows возвращает в Linux, в
+Moonlight для этого есть приложение «Reboot to Linux». Sunshine настраивается в браузере:
+`https://<сервер>:47990`.
+
 ## Разработка
 
 ```

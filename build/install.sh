@@ -2,6 +2,7 @@
 # lolssd: установить Windows на диск из Linux через QEMU (README.md, «Установка»): на внешний SSD
 # или на внутренний диск (например, сервера).
 #   sudo build/install.sh /dev/sdX dist/iso/lolssd-*.iso [РАЗМЕР_ПОД_WINDOWS, например 128G]
+#   sudo build/install.sh образ.img dist/iso/lolssd-*.iso РАЗМЕР_ОБРАЗА   (в файл, см. ниже)
 # ISO собирается заранее: make iso ISO=... — в нём уже всё: файл ответов, наши файлы, драйверы.
 # Скрипт размечает диск: ESP, раздел LOLSSD (утилита для Linux и профили), место под Windows.
 # Без размера Windows отдаётся весь остаток диска; с размером — столько гигабайт, а остаток
@@ -25,6 +26,19 @@ repo=$(cd "$(dirname "$0")/../.." && pwd)
 name=$(basename "$dev")
 
 [[ $EUID == 0 ]] || die "нужен root (sudo)"
+# Образ диска вместо диска: путь к ещё не существующему файлу *.img и его размер третьим
+# аргументом — файл подключается как loop-устройство (сервер: build/server-image.sh).
+image=
+if [[ $dev == *.img ]]; then
+	[[ ! -e $dev ]] || die "$dev уже есть"
+	[[ -n $win_gib ]] || die "для образа нужен размер, например 40G"
+	image=$dev
+	truncate -s "${win_gib}G" "$image"
+	dev=$(losetup --find --show --partscan "$image")
+	trap 'losetup -d "$dev"' EXIT
+	name=$(basename "$dev")
+	win_gib=
+fi
 [[ -n ${SUDO_USER:-} ]] || die "запускайте через sudo от своего пользователя: QEMU работает от его имени"
 [[ -b $dev && -e /sys/block/$name ]] || die "$dev — не диск целиком (нужен /dev/sdX, не раздел)"
 ! grep -q "^/dev/$name" /proc/mounts || die "разделы $dev смонтированы, отмонтируйте их (и уберите из /etc/fstab)"
@@ -53,7 +67,7 @@ if [[ -n $win_gib ]]; then
 fi
 
 lsblk -o NAME,SIZE,MODEL,TRAN "$dev"
-[[ $(readlink -f "/sys/block/$name") == */usb* ]] ||
+[[ -n $image || $(readlink -f "/sys/block/$name") == */usb* ]] ||
 	echo "ВНИМАНИЕ: $dev — внутренний диск компьютера, не USB. Проверьте, что это тот диск."
 [[ -z $auto ]] || command -v mkfs.ntfs >/dev/null || die "нет mkfs.ntfs (sudo pacman -S ntfs-3g)"
 if [[ -n $win_gib ]]; then
@@ -61,8 +75,10 @@ if [[ -n $win_gib ]]; then
 else
 	echo "Разметка: EFI 512M, LOLSSD 512M, Windows — весь остаток диска."
 fi
-read -rp "Всё на $dev будет стёрто. Введите $name для подтверждения: " ans
-[[ $ans == "$name" ]] || die "отменено"
+if [[ -z $image ]]; then
+	read -rp "Всё на $dev будет стёрто. Введите $name для подтверждения: " ans
+	[[ $ans == "$name" ]] || die "отменено"
+fi
 
 # ESP и LOLSSD; дальше свободное место, туда ставится Windows (MSR и NTFS она создаст сама).
 # LOLSSD и DATA — тип «basic data», чтобы Windows дала им буквы.
@@ -106,7 +122,7 @@ cp "$vars" "$work/OVMF_VARS.fd"
 mkdir "$work/tpm"
 chown -R "$SUDO_USER" "$work"
 setfacl -m "u:$SUDO_USER:rw" "$dev"
-trap 'setfacl -x "u:$SUDO_USER" "$dev"; rm -rf "$work"' EXIT
+trap 'setfacl -x "u:$SUDO_USER" "$dev"; rm -rf "$work"; [[ -z $image ]] || losetup -d "$dev"' EXIT
 
 # swtpm живёт, пока к нему подключён QEMU, и завершается вместе с ним (--terminate).
 sudo -u "$SUDO_USER" swtpm socket --tpm2 --tpmstate dir="$work/tpm" \
@@ -138,6 +154,11 @@ sudo -u "$SUDO_USER" --preserve-env=WAYLAND_DISPLAY,DISPLAY,XDG_RUNTIME_DIR \
 	-drive if=none,id=cd,media=cdrom,file="$iso" -device ide-cd,drive=cd,bus=ahci.1,bootindex=1 \
 	-device qemu-xhci -device usb-tablet -nic user,model=e1000e "${display[@]}"
 
+if [[ -n $image ]]; then
+	chown "$SUDO_USER" "$image"
+	echo "QEMU закрыт ($(date +%H:%M)), образ: $image"
+	exit 0
+fi
 echo "QEMU закрыт ($(date +%H:%M)). Если Windows выключилась сама (или после первого входа) — готово."
 echo "Загрузиться в неё один раз (следующая загрузка снова в Linux):"
 echo "  sudo mount $(part 2) /mnt && sudo sh /mnt/lolssd.sh boot"

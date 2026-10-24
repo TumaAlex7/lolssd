@@ -31,6 +31,7 @@ func logon() int {
 	fixShortcuts()
 	removeWSL()
 	extendDisplays()
+	growSystemDrive()
 	vol, err := lolssdVolume()
 	if err != nil {
 		log.Println(err)
@@ -261,4 +262,17 @@ func lolssdVolume() (string, error) {
 		}
 	}
 	return "", fmt.Errorf("том с меткой LOLSSD не найден")
+}
+
+// growSystemDrive растягивает C: на свободное место после него: образ диска (сервер,
+// build/server/write.sh) пишется на диск больше себя, и write.sh растягивает раздел, а ФС —
+// здесь, при входе.
+func growSystemDrive() {
+	script := `$max = (Get-PartitionSupportedSize -DriveLetter C).SizeMax
+$cur = (Get-Partition -DriveLetter C).Size
+if ($max - $cur -gt 1GB) { Resize-Partition -DriveLetter C -Size $max; "C: $([math]::Round($cur/1GB)) -> $([math]::Round($max/1GB)) GiB" }`
+	out, err := hidden(5*time.Minute, "powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script).CombinedOutput()
+	if msg := strings.TrimSpace(string(out)); err != nil || msg != "" {
+		log.Printf("диск C: %v %s", err, msg)
+	}
 }

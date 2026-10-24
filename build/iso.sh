@@ -35,7 +35,7 @@ riot=${RIOT:-1}
 [[ $variant == ssd || $variant == server ]] || die "VARIANT — ssd или server"
 repo=$(cd "$(dirname "$0")/.." && pwd)
 dist=$repo/dist
-out=$dist/iso/lolssd-$(basename "$src")
+out=$dist/iso/lolssd-$( [[ ${VARIANT:-ssd} == ssd ]] || echo "$VARIANT-")$(basename "$src")
 work=$dist/iso/work
 
 for t in 7z wimlib-imagex xorriso hivexregedit curl; do
