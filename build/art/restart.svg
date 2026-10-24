@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- lolssd: значок «Restart into Windows (SSD)» — стрелка по кругу вокруг окна. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1e2d4a"/>
+      <stop offset="1" stop-color="#0a1428"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="240" height="240" rx="48" fill="url(#bg)"/>
+  <rect x="8" y="8" width="240" height="240" rx="48" fill="none" stroke="#c8aa6e" stroke-width="6"/>
+  <!-- стрелка: дуга почти на полный круг и наконечник -->
+  <path d="M188 92A72 72 0 1 0 200 128" fill="none" stroke="#c8aa6e" stroke-width="18" stroke-linecap="round"/>
+  <path d="M206 58l-6 54-50-22z" fill="#c8aa6e"/>
+  <!-- окно из четырёх квадратов -->
+  <rect x="98" y="98" width="27" height="27" rx="3" fill="#e8eef2"/>
+  <rect x="131" y="98" width="27" height="27" rx="3" fill="#e8eef2"/>
+  <rect x="98" y="131" width="27" height="27" rx="3" fill="#e8eef2"/>
+  <rect x="131" y="131" width="27" height="27" rx="3" fill="#e8eef2"/>
+</svg>

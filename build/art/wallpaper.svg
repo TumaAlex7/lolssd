@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 3840 2160" width="3840" height="2160">
+  <!-- lolssd: обои Windows на SSD — тёмно-синий с золотом, сетка шестиугольников, бирюзовая
+       полоса, надпись в углу. Без логотипов Riot. -->
+  <defs>
+    <radialGradient id="bg" cx="0.35" cy="0.4" r="0.9">
+      <stop offset="0" stop-color="#13284a"/>
+      <stop offset="0.55" stop-color="#0a1428"/>
+      <stop offset="1" stop-color="#050a14"/>
+    </radialGradient>
+    <pattern id="hex" width="120" height="208" patternUnits="userSpaceOnUse">
+      <path d="M60 0l60 34.6v69.3L60 138.6 0 103.9V34.6z M60 138.6v69.4" fill="none" stroke="#c8aa6e" stroke-width="1.6"/>
+    </pattern>
+    <radialGradient id="fade" cx="0.72" cy="0.62" r="0.55">
+      <stop offset="0" stop-color="#fff" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </radialGradient>
+    <mask id="m"><rect width="3840" height="2160" fill="url(#fade)"/></mask>
+    <linearGradient id="line" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#2bd4c4" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#2bd4c4" stop-opacity="0.7"/>
+      <stop offset="1" stop-color="#2bd4c4" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect width="3840" height="2160" fill="url(#bg)"/>
+  <rect width="3840" height="2160" fill="url(#hex)" mask="url(#m)"/>
+  <path d="M0 1520 C 1200 1380, 2400 1700, 3840 1450" fill="none" stroke="url(#line)" stroke-width="5"/>
+  <path d="M0 1560 C 1300 1440, 2500 1760, 3840 1500" fill="none" stroke="#c8aa6e" stroke-opacity="0.35" stroke-width="2"/>
+  <text x="3640" y="2010" text-anchor="end" font-family="JetBrainsMono Nerd Font, monospace" font-weight="700" font-size="96" fill="#c8aa6e" fill-opacity="0.85" letter-spacing="8">lolssd</text>
+  <text x="3640" y="2070" text-anchor="end" font-family="JetBrainsMono Nerd Font, monospace" font-size="34" fill="#e8eef2" fill-opacity="0.45" letter-spacing="4">league on an external ssd</text>
+</svg>

@@ -4,6 +4,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 	"unsafe"
@@ -15,11 +16,12 @@ import (
 )
 
 var (
-	user32           = windows.NewLazySystemDLL("user32.dll")
-	procGetBufSizes  = user32.NewProc("GetDisplayConfigBufferSizes")
-	procQueryConfig  = user32.NewProc("QueryDisplayConfig")
-	procGetDevInfo   = user32.NewProc("DisplayConfigGetDeviceInfo")
-	procGlobalMemory = kernel32.NewProc("GlobalMemoryStatusEx")
+	user32            = windows.NewLazySystemDLL("user32.dll")
+	procGetBufSizes   = user32.NewProc("GetDisplayConfigBufferSizes")
+	procQueryConfig   = user32.NewProc("QueryDisplayConfig")
+	procGetDevInfo    = user32.NewProc("DisplayConfigGetDeviceInfo")
+	procGlobalMemory  = kernel32.NewProc("GlobalMemoryStatusEx")
+	procSetDisplayCfg = user32.NewProc("SetDisplayConfig")
 )
 
 // Структуры CCD API (wingdi.h); все поля по 4 байта, поэтому выравнивание совпадает с C.
@@ -136,3 +138,21 @@ var (
 	_ [64]byte  = [unsafe.Sizeof(dcMode{})]byte{}
 	_ [420]byte = [unsafe.Sizeof(dcTargetName{})]byte{}
 )
+
+// extendDisplays переключает Windows в режим «Расширить», если какие-то мониторы показывают одну
+// и ту же область (режим «Дублировать» — его Windows включает по умолчанию при подключении
+// второго монитора). Порядок и положение мониторов Windows берёт из своей базы для этого набора
+// мониторов; возвращает true, если раскладка менялась.
+func extendDisplays() bool {
+	mons, err := activeMonitors()
+	if err != nil || len(distinctMonitors(mons)) == len(mons) {
+		return false
+	}
+	const sdcTopologyExtend, sdcApply = 0x4, 0x80
+	if r, _, _ := procSetDisplayCfg.Call(0, 0, 0, 0, sdcTopologyExtend|sdcApply); r != 0 {
+		log.Printf("SetDisplayConfig(extend): %d", r)
+		return false
+	}
+	log.Println("мониторы: «Дублировать» → «Расширить»")
+	return true
+}

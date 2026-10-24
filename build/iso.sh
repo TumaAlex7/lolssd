@@ -5,11 +5,13 @@
 #
 # Что получается (dist/iso/lolssd-<имя исходного ISO>):
 #   - в install.wim только одна редакция: установщик не спрашивает какую;
-#   - из образа удалены Edge и OneDrive, lolssd.reg применён к его реестру (build/debloat.sh);
+#   - из образа удалены Edge, OneDrive и специальные возможности, lolssd.reg применён к его
+#     реестру (build/debloat.sh); обои и экран блокировки — свои (build/art);
 #     приложения и компоненты Windows удаляет DISM в виртуалке установки (lolssd-setup.ps1);
 #   - наши файлы лежат прямо в образе Windows, установщик ничего не докачивает и не копирует:
 #       \Windows\Setup\Scripts\   SetupComplete.cmd, lolssd-setup.ps1, lolssd.reg
 #       \Program Files\lolssd\    lolssd-win.exe, lolssd-drivers.ps1, vncviewer.exe (TigerVNC),
+#                                 значки ярлыков (build/art),
 #                                 qemu\ (QEMU для ВМ с системой хоста, make qemu),
 #                                 tap\ (драйвер TAP-Windows для её сети, make tap)
 #       \Drivers\                 INF-драйверы (если указаны)
@@ -71,6 +73,13 @@ fi
 	echo "add '$dist/windows/lolssd.reg' '/Windows/Setup/Scripts/lolssd.reg'"
 	echo "add '$dist/windows/C/Program Files/lolssd' '/Program Files/lolssd'"
 	[[ -s $viewer ]] && echo "add '$viewer' '/Program Files/lolssd/vncviewer.exe'"
+	# Значки ярлыков и свои обои (build/art): обои по умолчанию для новых пользователей, их
+	# варианты под разрешения и экран блокировки.
+	art=$repo/build/art
+	for i in linux restart; do echo "add '$art/$i.ico' '/Program Files/lolssd/$i.ico'"; done
+	echo "add '$art/img0.jpg' '/Windows/Web/Wallpaper/Windows/img0.jpg'"
+	for f in "$art"/img0_*.jpg; do echo "add '$f' '/Windows/Web/4K/Wallpaper/Windows/$(basename "$f")'"; done
+	echo "add '$art/img100.jpg' '/Windows/Web/Screen/img100.jpg'"
 	if [[ -f $dist/tap/OemVista.inf ]]; then
 		echo "add '$dist/tap' '/Program Files/lolssd/tap'"
 	else

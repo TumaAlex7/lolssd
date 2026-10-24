@@ -100,6 +100,9 @@ func desktop() int {
 	if p.VM == nil {
 		return fail("В профиле нет образа загрузки для ВМ: снимите профиль заново (lolssd profile).")
 	}
+	if extendDisplays() {
+		time.Sleep(2 * time.Second) // Windows применяет раскладку не сразу
+	}
 	mons, err := activeMonitors()
 	if err != nil || len(mons) == 0 {
 		return fail("Мониторы Windows: %v", err)
