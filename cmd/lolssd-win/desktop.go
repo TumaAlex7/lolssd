@@ -19,6 +19,7 @@ import (
 	"golang.org/x/sys/windows"
 
 	"lolssd/hostprofile"
+	"lolssd/keymap"
 	"lolssd/winctl"
 )
 
@@ -114,6 +115,7 @@ func desktop() int {
 		CPUs:      max(runtime.NumCPU()-2, 2),
 		Monitors:  mons,
 		AudioPCI:  p.AudioPCI,
+		Keyd:      keymap.VMConfig(p.Keyboard.Keyd),
 		SerialLog: filepath.Join(dataDir, "serial.log"),
 		QMPPort:   qmpPort,
 	}

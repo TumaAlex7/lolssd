@@ -87,3 +87,25 @@ func TestQEMUArgs(t *testing.T) {
 		t.Error("нет kernel-irqchip=off")
 	}
 }
+
+func TestKeydArgs(t *testing.T) {
+	if keydArgs("") != nil {
+		t.Error("без конфига keyd не трогаем")
+	}
+	a := keydArgs("[ids]\n*\n")
+	dec := func(s, prefix string) string {
+		b, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(s, prefix))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
+	}
+	tf := dec(a[1], "type=11,value=io.systemd.credential.binary:tmpfiles.extra=")
+	if !strings.HasPrefix(tf, "f~ /run/lolssd-vm/keyd/vm.conf 0644 root root - ") ||
+		dec(strings.TrimSpace(strings.Fields(tf)[6]), "") != "[ids]\n*\n" {
+		t.Errorf("tmpfiles: %q", tf)
+	}
+	if d := dec(a[3], "type=11,value=io.systemd.credential.binary:systemd.unit-dropin.keyd.service="); d != "[Service]\nBindReadOnlyPaths=/run/lolssd-vm/keyd:/etc/keyd\n" {
+		t.Errorf("drop-in: %q", d)
+	}
+}

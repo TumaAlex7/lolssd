@@ -16,6 +16,7 @@ type VM struct {
 	MemMiB, CPUs            int
 	Monitors                []hostprofile.WinMonitor // по одному выходу virtio-gpu на монитор, слева направо
 	AudioPCI                string                   // адрес звуковой карты хоста, см. hostprofile.Profile
+	Keyd                    string                   // конфиг keyd для ВМ (keymap.VMConfig), пусто — без keyd
 	SerialLog               string
 	QMPPort                 int
 	IrqchipOff              bool // запасной режим WHPX: прерывания в QEMU, а не в гипервизоре
@@ -64,6 +65,7 @@ func QEMUArgs(v VM) []string {
 	}
 	a = append(a, "-smbios", "type=11,value=io.systemd.credential.binary:udev.rules.70-lolssd-vm="+
 		base64.StdEncoding.EncodeToString([]byte(VMUdevRules(v.Monitors))))
+	a = append(a, keydArgs(v.Keyd)...)
 	a = append(a, "-audiodev", "dsound,id=snd0")
 	a = append(a, hdaArgs(v.AudioPCI)...)
 	a = append(a, "-nic", "user,model=virtio-net-pci",
@@ -144,3 +146,20 @@ func nvmeID(s string, n int, def string) string {
 
 // optEscape удваивает запятые: в значениях параметров QEMU запятая — разделитель.
 func optEscape(s string) string { return strings.ReplaceAll(s, ",", ",,") }
+
+// keydArgs подменяет keyd в ВМ конфиг на сведённый для неё (keymap.VMConfig), не трогая /etc/keyd
+// хоста: учётные данные systemd через SMBIOS — строка tmpfiles, которая пишет конфиг в
+// /run/lolssd-vm/keyd, и дополнение keyd.service, которое показывает keyd эту папку вместо
+// /etc/keyd. Всё это есть только в памяти ВМ.
+func keydArgs(conf string) []string {
+	if conf == "" {
+		return nil
+	}
+	b64 := base64.StdEncoding.EncodeToString
+	tmpfiles := "f~ /run/lolssd-vm/keyd/vm.conf 0644 root root - " + b64([]byte(conf)) + "\n"
+	dropin := "[Service]\nBindReadOnlyPaths=/run/lolssd-vm/keyd:/etc/keyd\n"
+	return []string{
+		"-smbios", "type=11,value=io.systemd.credential.binary:tmpfiles.extra=" + b64([]byte(tmpfiles)),
+		"-smbios", "type=11,value=io.systemd.credential.binary:systemd.unit-dropin.keyd.service=" + b64([]byte(dropin)),
+	}
+}
