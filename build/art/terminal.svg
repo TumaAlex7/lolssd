@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- lolssd: значок «Linux terminal» (консоль хоста в ВМ) — окно терминала с пингвином в правом
+       нижнем углу. -->
+  <rect x="16" y="28" width="224" height="180" rx="18" fill="#0a1428" stroke="#2bd4c4" stroke-width="10"/>
+  <path d="M16 46a18 18 0 0 1 18-18h188a18 18 0 0 1 18 18v14H16z" fill="#2bd4c4"/>
+  <circle cx="40" cy="44" r="6" fill="#0a1428"/>
+  <circle cx="60" cy="44" r="6" fill="#0a1428"/>
+  <path d="M42 96l36 26-36 26" fill="none" stroke="#e8eef2" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="90" y="140" width="52" height="14" rx="4" fill="#e8eef2"/>
+  <!-- пингвин (общий для обоих значков) -->
+  <g transform="translate(150 132) scale(0.42)">
+    <ellipse cx="128" cy="150" rx="62" ry="74" fill="#e8eef2"/>
+    <path d="M128 52c-40 0-60 30-60 66 0 18 4 34 10 48 8-26 26-42 50-42s42 16 50 42c6-14 10-30 10-48 0-36-20-66-60-66z" fill="#101820"/>
+    <ellipse cx="108" cy="96" rx="12" ry="15" fill="#fff"/>
+    <ellipse cx="148" cy="96" rx="12" ry="15" fill="#fff"/>
+    <circle cx="111" cy="99" r="6" fill="#101820"/>
+    <circle cx="145" cy="99" r="6" fill="#101820"/>
+    <path d="M108 118q20 16 40 0q-20 22-40 0z" fill="#f0b429"/>
+    <ellipse cx="96" cy="222" rx="26" ry="10" fill="#f0b429"/>
+    <ellipse cx="160" cy="222" rx="26" ry="10" fill="#f0b429"/>
+  </g>
+</svg>

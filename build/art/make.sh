@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # lolssd: значки и обои из SVG этой папки (результат хранится в репозитории, пересобирать — только
 # после правки SVG). Нужны rsvg-convert и ImageMagick.
-#   linux.ico, restart.ico — значки ярлыков (16–256 px);
-#   img0.jpg и img0_ШxВ.jpg — обои Windows по умолчанию (Web\Wallpaper и Web\4K\Wallpaper),
-#   img100.jpg — экран блокировки (Web\Screen).
+#   linux.ico, terminal.ico — значки ярлыков «Linux» и «Linux terminal» (16–256 px);
+#   img0.jpg и img0_ШxВ.jpg, img100.jpg — запасные обои и экран блокировки: основные — обложка,
+#   которую build/iso.sh скачивает при сборке (WALLPAPER).
 set -euo pipefail
 cd "$(dirname "$0")"
 t=$(mktemp -d)
 trap 'rm -rf "$t"' EXIT
-for i in linux restart; do
+for i in linux terminal; do
 	for s in 16 24 32 48 64 128 256; do
 		rsvg-convert -w $s -h $s "$i.svg" -o "$t/$i-$s.png"
 	done

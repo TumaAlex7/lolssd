@@ -38,6 +38,10 @@ func main() {
 		os.Exit(logon())
 	case "desktop":
 		os.Exit(desktop())
+	case "vm":
+		os.Exit(vmHost(false))
+	case "terminal":
+		os.Exit(terminal())
 	case "restart":
 		os.Exit(restartSelf())
 	default:
@@ -46,6 +50,6 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: lolssd-win nvram-guard | logon | desktop | restart")
+	fmt.Fprintln(os.Stderr, "usage: lolssd-win nvram-guard | logon | desktop | terminal | vm | restart")
 	os.Exit(2)
 }

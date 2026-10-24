@@ -1,21 +1,27 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
-  <!-- lolssd: значок «Linux desktop (host)» — пингвин на экране. -->
+  <!-- lolssd: значок «Linux» (рабочий стол хоста в ВМ) — монитор с пингвином в правом нижнем углу. -->
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+    <linearGradient id="scr" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#0e3a4a"/>
       <stop offset="1" stop-color="#0a1428"/>
     </linearGradient>
   </defs>
-  <rect x="8" y="8" width="240" height="240" rx="48" fill="url(#bg)"/>
-  <rect x="8" y="8" width="240" height="240" rx="48" fill="none" stroke="#2bd4c4" stroke-width="6"/>
-  <!-- пингвин -->
-  <ellipse cx="128" cy="150" rx="62" ry="74" fill="#e8eef2"/>
-  <path d="M128 52c-40 0-60 30-60 66 0 18 4 34 10 48 8-26 26-42 50-42s42 16 50 42c6-14 10-30 10-48 0-36-20-66-60-66z" fill="#101820"/>
-  <ellipse cx="108" cy="96" rx="12" ry="15" fill="#fff"/>
-  <ellipse cx="148" cy="96" rx="12" ry="15" fill="#fff"/>
-  <circle cx="111" cy="99" r="6" fill="#101820"/>
-  <circle cx="145" cy="99" r="6" fill="#101820"/>
-  <path d="M108 118q20 16 40 0q-20 22-40 0z" fill="#f0b429"/>
-  <ellipse cx="96" cy="222" rx="26" ry="10" fill="#f0b429"/>
-  <ellipse cx="160" cy="222" rx="26" ry="10" fill="#f0b429"/>
+  <rect x="16" y="28" width="208" height="148" rx="16" fill="url(#scr)" stroke="#2bd4c4" stroke-width="10"/>
+  <rect x="34" y="46" width="56" height="40" rx="5" fill="#2bd4c4" fill-opacity="0.35"/>
+  <rect x="98" y="46" width="108" height="40" rx="5" fill="#2bd4c4" fill-opacity="0.2"/>
+  <rect x="34" y="94" width="104" height="64" rx="5" fill="#2bd4c4" fill-opacity="0.2"/>
+  <path d="M104 176h32l8 30h-48z" fill="#2bd4c4"/>
+  <rect x="72" y="204" width="96" height="12" rx="6" fill="#2bd4c4"/>
+  <!-- пингвин (общий для обоих значков) -->
+  <g transform="translate(150 132) scale(0.42)">
+    <ellipse cx="128" cy="150" rx="62" ry="74" fill="#e8eef2"/>
+    <path d="M128 52c-40 0-60 30-60 66 0 18 4 34 10 48 8-26 26-42 50-42s42 16 50 42c6-14 10-30 10-48 0-36-20-66-60-66z" fill="#101820"/>
+    <ellipse cx="108" cy="96" rx="12" ry="15" fill="#fff"/>
+    <ellipse cx="148" cy="96" rx="12" ry="15" fill="#fff"/>
+    <circle cx="111" cy="99" r="6" fill="#101820"/>
+    <circle cx="145" cy="99" r="6" fill="#101820"/>
+    <path d="M108 118q20 16 40 0q-20 22-40 0z" fill="#f0b429"/>
+    <ellipse cx="96" cy="222" rx="26" ry="10" fill="#f0b429"/>
+    <ellipse cx="160" cy="222" rx="26" ry="10" fill="#f0b429"/>
+  </g>
 </svg>

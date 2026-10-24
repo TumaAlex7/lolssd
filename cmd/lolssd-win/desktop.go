@@ -55,24 +55,58 @@ var _ [48]byte = [unsafe.Sizeof(msg{})]byte{} // MSG на amd64
 
 var dataDir = filepath.Join(os.Getenv("ProgramData"), "lolssd")
 
-// desktop — ярлык «Linux desktop (host)» (docs/ARCHITECTURE.md §6): система хоста в ВМ QEMU с
-// WHPX, своим ядром со своих дисков; на каждый монитор Windows — полноэкранный TigerVNC на
-// выход virtio-gpu этой ВМ.
+// showEvent — событие работающей ВМ: его существование значит, что ВМ уже запущена, а сигнал —
+// просьба её процессу открыть рабочий стол на мониторах. ВМ всегда одна: два QEMU на одном
+// диске хоста испортили бы его ФС.
+const showEvent = `Local\lolssd-vm-show`
+
+// desktop — ярлык «Linux»: система хоста в ВМ и её рабочий стол на всех мониторах.
+func desktop() int { return vmHost(true) }
+
+// vmHost (docs/ARCHITECTURE.md §6): система хоста в ВМ QEMU с WHPX, своим ядром со своих дисков;
+// с show — на каждый монитор Windows полноэкранный TigerVNC на выход virtio-gpu этой ВМ, без
+// него (команда vm, её запускает «Linux terminal») — без окон, пока не попросят рабочий стол.
+// ВМ уже работает — только просит её процесс показать рабочий стол.
 //
-// Диски хоста целиком открывает только администратор, поэтому из ярлыка программа
-// перезапускает себя с запросом UAC. Монитор отдают Windows, закрыв его просмотрщик
-// (Ctrl+Alt+M → Exit viewer), и возвращают Linux сочетанием Ctrl+Alt+F12 на нём. Всё
-// заканчивается, когда система в ВМ выключается: тогда закрываются и просмотрщики.
-func desktop() int {
+// Диски хоста целиком открывает только администратор, поэтому программа перезапускает себя с
+// запросом UAC. Монитор отдают Windows, закрыв его просмотрщик (Ctrl+Alt+M → Exit viewer), и
+// возвращают Linux сочетанием Ctrl+Alt+F12 на нём. Всё заканчивается, когда система в ВМ
+// выключается: тогда закрываются и просмотрщики.
+func vmHost(show bool) int {
+	if h, err := windows.OpenEvent(windows.EVENT_MODIFY_STATE, false, windows.StringToUTF16Ptr(showEvent)); err == nil {
+		if show {
+			windows.SetEvent(h)
+		}
+		windows.CloseHandle(h)
+		return 0
+	}
 	if !windows.GetCurrentProcessToken().IsElevated() {
+		cmd := "vm"
+		if show {
+			cmd = "desktop"
+		}
 		exe, _ := os.Executable()
 		if err := windows.ShellExecute(0, windows.StringToUTF16Ptr("runas"), windows.StringToUTF16Ptr(exe),
-			windows.StringToUTF16Ptr("desktop"), nil, windows.SW_HIDE); err != nil {
+			windows.StringToUTF16Ptr(cmd), nil, windows.SW_HIDE); err != nil {
 			log.Println("запуск с правами администратора:", err)
 			return 1
 		}
 		return 0
 	}
+	// Событие доступно и процессам без повышенных прав (ярлыки).
+	sd, _ := windows.SecurityDescriptorFromString("D:(A;;GA;;;AU)")
+	sa := &windows.SecurityAttributes{Length: uint32(unsafe.Sizeof(windows.SecurityAttributes{})), SecurityDescriptor: sd}
+	ev, err := windows.CreateEvent(sa, 0, 0, windows.StringToUTF16Ptr(showEvent))
+	if err == windows.ERROR_ALREADY_EXISTS {
+		if show {
+			windows.SetEvent(ev)
+		}
+		return 0 // ВМ запустил кто-то другой одновременно с нами
+	}
+	if err != nil {
+		return fail("Событие ВМ: %v", err)
+	}
+	defer windows.CloseHandle(ev)
 	runtime.LockOSThread() // горячая клавиша и таймер привязаны к потоку
 	// Координаты CCD API физические: процесс должен понимать DPI каждого монитора.
 	const perMonitorAwareV2 = ^uintptr(3) // DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = -4
@@ -222,8 +256,13 @@ func desktop() int {
 					break drain
 				}
 			}
+			if r, _ := windows.WaitForSingleObject(ev, 0); r == windows.WAIT_OBJECT_0 {
+				show = true
+				clear(given)
+				log.Println("рабочий стол показан")
+			}
 			for i := range mons {
-				if viewers[i] == nil && !given[i] && listening(winctl.VNCPort(i)) {
+				if show && viewers[i] == nil && !given[i] && listening(winctl.VNCPort(i)) {
 					if !sized[i] {
 						addr := fmt.Sprintf("127.0.0.1:%d", winctl.VNCPort(i))
 						if err := winctl.SetDesktopSize(addr, mons[i].Width, mons[i].Height); err != nil {

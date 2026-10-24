@@ -9,6 +9,10 @@ import (
 	"lolssd/hostprofile"
 )
 
+// ConsolePort — второй COM-порт ВМ (ttyS1, getty) на 127.0.0.1: к нему подключается окно
+// «Linux terminal». Первый COM-порт — журнал загрузки в файл.
+const ConsolePort = 4555
+
 // VM — что нужно для запуска системы хоста в QEMU с WHPX (docs/ARCHITECTURE.md §6).
 type VM struct {
 	Kernel, Initrd, Cmdline string // из UKI профиля
@@ -45,7 +49,9 @@ func QEMUArgs(v VM) []string {
 	a := []string{
 		"-name", "lolssd", "-nodefaults", "-machine", "q35,vmport=off", "-accel", accel,
 		"-cpu", "max,vmx=off,svm=off", "-smp", strconv.Itoa(v.CPUs), "-m", strconv.Itoa(v.MemMiB),
-		"-kernel", v.Kernel, "-initrd", v.Initrd, "-append", v.Cmdline,
+		"-kernel", v.Kernel, "-initrd", v.Initrd,
+		// Вход в консоли (ярлык «Linux terminal»): getty на втором COM-порту.
+		"-append", v.Cmdline + " systemd.wants=serial-getty@ttyS1.service",
 	}
 	for i, d := range v.Disks {
 		a = append(a, "-drive", fmt.Sprintf("if=none,id=disk%d,format=raw,file=%s", i, optEscape(d.Path)),
@@ -69,6 +75,8 @@ func QEMUArgs(v VM) []string {
 	a = append(a, "-smbios", "type=11,value=io.systemd.credential.binary:udev.rules.70-lolssd-vm="+
 		base64.StdEncoding.EncodeToString([]byte(VMUdevRules(v.Monitors))))
 	a = append(a, keydArgs(v.Keyd)...)
+	a = append(a, "-smbios", "type=11,value=io.systemd.credential.binary:systemd.unit-dropin.serial-getty@ttyS1.service="+
+		base64.StdEncoding.EncodeToString([]byte("[Service]\nEnvironment=TERM=xterm-256color\n")))
 	a = append(a, "-audiodev", "dsound,id=snd0")
 	a = append(a, hdaArgs(v.AudioPCI)...)
 	if v.Tap != "" {
@@ -79,6 +87,7 @@ func QEMUArgs(v VM) []string {
 	}
 	a = append(a,
 		"-display", "none", "-serial", "file:"+v.SerialLog,
+		"-serial", fmt.Sprintf("tcp:127.0.0.1:%d,server=on,wait=off,nodelay=on", ConsolePort),
 		"-qmp", fmt.Sprintf("tcp:127.0.0.1:%d,server=on,wait=off", v.QMPPort))
 	return a
 }

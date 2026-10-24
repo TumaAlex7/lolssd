@@ -66,7 +66,8 @@ func TestQEMUArgs(t *testing.T) {
 		"127.0.0.1:1,id=vnc0,display=video0,head=0",
 		"127.0.0.1:2,id=vnc1,display=video0,head=1",
 		"usb-tablet,bus=xhci.0,serial=lolssd-head1,display=video0,head=1",
-		"-append\x00root=UUID=x rw\x00",
+		"-append\x00root=UUID=x rw systemd.wants=serial-getty@ttyS1.service\x00",
+		"tcp:127.0.0.1:4555,server=on,wait=off,nodelay=on",
 		"tcp:127.0.0.1:4444,server=on,wait=off",
 	} {
 		if !strings.Contains(s, want) {
@@ -74,7 +75,7 @@ func TestQEMUArgs(t *testing.T) {
 		}
 	}
 	for i, x := range a {
-		if x == "-smbios" {
+		if x == "-smbios" && strings.Contains(a[i+1], "udev.rules") {
 			b64 := strings.TrimPrefix(a[i+1], "type=11,value=io.systemd.credential.binary:udev.rules.70-lolssd-vm=")
 			rules, err := base64.StdEncoding.DecodeString(b64)
 			if err != nil || string(rules) != VMUdevRules(v.Monitors) {

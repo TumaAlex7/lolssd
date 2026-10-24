@@ -6,12 +6,13 @@
 # Что получается (dist/iso/lolssd-<имя исходного ISO>):
 #   - в install.wim только одна редакция: установщик не спрашивает какую;
 #   - из образа удалены Edge, OneDrive и специальные возможности, lolssd.reg применён к его
-#     реестру (build/debloat.sh); обои и экран блокировки — свои (build/art);
+#     реестру (build/debloat.sh); обои и экран блокировки — WALLPAPER (по умолчанию обложка клипа
+#     K/DA FIRESTARTER, скачивается при сборке) или запасные из build/art;
 #     приложения и компоненты Windows удаляет DISM в виртуалке установки (lolssd-setup.ps1);
 #   - наши файлы лежат прямо в образе Windows, установщик ничего не докачивает и не копирует:
 #       \Windows\Setup\Scripts\   SetupComplete.cmd, lolssd-setup.ps1, lolssd.reg
 #       \Program Files\lolssd\    lolssd-win.exe, lolssd-drivers.ps1, vncviewer.exe (TigerVNC),
-#                                 значки ярлыков (build/art),
+#                                 значок ярлыка Linux (build/art),
 #                                 qemu\ (QEMU для ВМ с системой хоста, make qemu),
 #                                 tap\ (драйвер TAP-Windows для её сети, make tap)
 #       \Drivers\                 INF-драйверы (если указаны)
@@ -68,18 +69,42 @@ if [[ ! -s $viewer ]]; then
 		mv "$viewer.part" "$viewer" ||
 		echo "  внимание: TigerVNC $vnc не скачан — в образе не будет рабочего стола Linux" >&2
 fi
+# Обои: картинка по ссылке или файл из WALLPAPER (по умолчанию — обложка клипа K/DA FIRESTARTER с
+# официального канала League of Legends; в репозитории её нет — это арт Riot), растянутая под
+# разрешения. Не скачалась или нет ImageMagick — свои обои из build/art.
+wallsrc=${WALLPAPER:-https://i.ytimg.com/vi/Mmw-PpWhKFg/maxresdefault.jpg}
+wall=$repo/build/art
+if command -v magick >/dev/null; then
+	pic=$wallsrc
+	if [[ ! -f $pic ]]; then
+		pic=$dist/cache/wallpaper-$(printf %s "$wallsrc" | sha256sum | cut -c1-12).jpg
+		[[ -s $pic ]] || curl -fsSL --retry 3 -o "$pic" "$wallsrc" || rm -f "$pic"
+	fi
+	if [[ -s $pic ]]; then
+		wall=$work/wall
+		mkdir -p "$wall"
+		magick "$pic" -filter Lanczos -resize 3840x2160^ -gravity center -extent 3840x2160 -quality 92 "$wall/img0.jpg"
+		cp "$wall/img0.jpg" "$wall/img100.jpg"
+		for size in 1920x1080 1920x1200 2560x1440 2560x1600 3840x2160; do
+			magick "$pic" -filter Lanczos -resize "$size^" -gravity center -extent "$size" -quality 92 "$wall/img0_$size.jpg"
+		done
+	else
+		echo "  внимание: обои $wallsrc не получены — в образе запасные из build/art" >&2
+	fi
+else
+	echo "  (нет ImageMagick — в образе запасные обои из build/art)" >&2
+fi
 {
 	echo "add '$dist/windows/C/Windows/Setup/Scripts' '/Windows/Setup/Scripts'"
 	echo "add '$dist/windows/lolssd.reg' '/Windows/Setup/Scripts/lolssd.reg'"
 	echo "add '$dist/windows/C/Program Files/lolssd' '/Program Files/lolssd'"
 	[[ -s $viewer ]] && echo "add '$viewer' '/Program Files/lolssd/vncviewer.exe'"
-	# Значки ярлыков и свои обои (build/art): обои по умолчанию для новых пользователей, их
-	# варианты под разрешения и экран блокировки.
-	art=$repo/build/art
-	for i in linux restart; do echo "add '$art/$i.ico' '/Program Files/lolssd/$i.ico'"; done
-	echo "add '$art/img0.jpg' '/Windows/Web/Wallpaper/Windows/img0.jpg'"
-	for f in "$art"/img0_*.jpg; do echo "add '$f' '/Windows/Web/4K/Wallpaper/Windows/$(basename "$f")'"; done
-	echo "add '$art/img100.jpg' '/Windows/Web/Screen/img100.jpg'"
+	# Значок ярлыка Linux и обои: обои по умолчанию для новых пользователей, их варианты под
+	# разрешения и экран блокировки (wallpaper выше).
+	echo "add '$repo/build/art/linux.ico' '/Program Files/lolssd/linux.ico'"
+	echo "add '$wall/img0.jpg' '/Windows/Web/Wallpaper/Windows/img0.jpg'"
+	for f in "$wall"/img0_*.jpg; do echo "add '$f' '/Windows/Web/4K/Wallpaper/Windows/$(basename "$f")'"; done
+	echo "add '$wall/img100.jpg' '/Windows/Web/Screen/img100.jpg'"
 	if [[ -f $dist/tap/OemVista.inf ]]; then
 		echo "add '$dist/tap' '/Program Files/lolssd/tap'"
 	else
