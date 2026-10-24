@@ -12,7 +12,6 @@
 #       \Program Files\lolssd\    lolssd-win.exe, lolssd-drivers.ps1, vncviewer.exe (TigerVNC),
 #                                 qemu\ (QEMU для ВМ с системой хоста, make qemu),
 #                                 tap\ (драйвер TAP-Windows для её сети, make tap)
-#       \ProgramData\lolssd\wsl\  пусковой WSL-дистрибутив и MSI WSL (если собраны make wsl)
 #       \Drivers\                 INF-драйверы (если указаны)
 #   - autounattend.xml в корне ISO (установщик ищет его там);
 #   - образ больше 4 ГБ режется на install.swm: ISO 9660 не хранит файлы больше 4 ГБ, а
@@ -82,16 +81,6 @@ fi
 	else
 		echo "  (нет dist/qemu — в образе не будет рабочего стола Linux; make qemu)" >&2
 	fi
-	compgen -G "$dist/wsl/*.msi" >/dev/null ||
-		echo "  (нет MSI WSL в dist/wsl — WSL в образе не будет; make wsl докачает)" >&2
-	if [[ -f $dist/wsl/lolssd.tar ]]; then
-		# По файлу: недокачанный MSI (*.part) в образ не попадает.
-		for f in "$dist"/wsl/lolssd.tar "$dist"/wsl/*.msi; do
-			[[ -f $f ]] && echo "add '$f' '/ProgramData/lolssd/wsl/$(basename "$f")'"
-		done
-	else
-		echo "  (нет dist/wsl/lolssd.tar — без пускового WSL-дистрибутива; make wsl)" >&2
-	fi
 	[[ -z $drivers ]] || echo "add '$(realpath "$drivers")' '/Drivers'"
 } | wimlib-imagex update "$work/tree/sources/install.wim" 1 >/dev/null
 
@@ -104,7 +93,7 @@ if (( size > 4000 * 1024 * 1024 )); then
 	rm "$work/tree/sources/install.wim"
 fi
 
-cp "$repo/build/prototype/autounattend.xml" "$work/tree/autounattend.xml"
+cp "$repo/build/setup/autounattend.xml" "$work/tree/autounattend.xml"
 
 echo "6/6 сборка ISO"
 mkdir -p "$(dirname "$out")"

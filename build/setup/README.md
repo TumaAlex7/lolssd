@@ -36,7 +36,7 @@
 - `powercfg /hibernate off` — удалить `hiberfil.sys`, если установка его оставила;
 - выключить задания планировщика Windows Update (второй слой поверх выключенных служб);
 - выключить BitLocker, если шифрование успело начаться;
-- включить WSL и Virtual Machine Platform, `hypervisorlaunchtype auto`;
+- включить Windows Hypervisor Platform (WHPX, для ВМ с Linux хоста), `hypervisorlaunchtype auto`;
 - `DISM /Set-ReservedStorageState /State:Disabled` (значение в реестре срабатывает, только если
   задано до создания резерва).
 - зарегистрировать задание планировщика `\lolssd\nvram-guard`: при каждом старте Windows от SYSTEM

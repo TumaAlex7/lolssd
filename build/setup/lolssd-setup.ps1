@@ -56,25 +56,11 @@ Step 'BitLocker off on system drive' {
     }
 }
 
-# Needed only for Linux inside Windows, but enabling later would cost an extra reboot.
-# Windows Hypervisor Platform: QEMU runs the host's Linux on Windows' own hypervisor (WHPX).
+# Linux inside Windows: QEMU runs the host's Linux on Windows' own hypervisor (WHPX). Enabling
+# it later would cost an extra reboot.
 Step 'Windows Hypervisor Platform' {
     Enable-WindowsOptionalFeature -Online -All -NoRestart -FeatureName HypervisorPlatform | Out-Null
-}
-
-Step 'WSL and Virtual Machine Platform' {
-    Enable-WindowsOptionalFeature -Online -All -NoRestart -FeatureName VirtualMachinePlatform | Out-Null
-    Enable-WindowsOptionalFeature -Online -All -NoRestart -FeatureName Microsoft-Windows-Subsystem-Linux | Out-Null
     Run bcdedit.exe /set '{current}' hypervisorlaunchtype auto
-}
-
-# wsl.exe in Windows is only a stub; WSL itself is a package. The MSI from Microsoft's GitHub
-# ships in the image (make wsl), so no Store or network is needed.
-Step 'install WSL' {
-    $msi = Get-ChildItem "$env:ProgramData\lolssd\wsl\*.msi" -ErrorAction SilentlyContinue | Select-Object -First 1
-    if (-not $msi) { throw 'no WSL MSI in \ProgramData\lolssd\wsl (make wsl)' }
-    $p = Start-Process msiexec.exe -ArgumentList '/i', "`"$($msi.FullName)`"", '/qn', '/norestart' -Wait -PassThru
-    if ($p.ExitCode -notin 0, 3010) { throw "msiexec exited with $($p.ExitCode)" }
 }
 
 # ShippedWithReserves in lolssd.reg works only if set before setup created the reserve.
@@ -92,14 +78,14 @@ Step 'register NVRAM guard task' {
     Register-ScheduledTask -TaskPath '\lolssd\' -TaskName 'nvram-guard' -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null
 }
 
-# Linux inside Windows: at every logon of an administrator (the autologon user), elevated,
-# because wsl --mount requires it. Without a profile for this machine it exits quietly.
-Step 'register host disk mount task' {
+# At every logon of an administrator (the autologon user), elevated: shortcuts and the Scancode
+# Map for the VM (lolssd-win logon). Without a profile for this machine it exits quietly.
+Step 'register logon task' {
     $exe = "$env:ProgramFiles\lolssd\lolssd-win.exe"
-    $action = New-ScheduledTaskAction -Execute $exe -Argument 'mount'
+    $action = New-ScheduledTaskAction -Execute $exe -Argument 'logon'
     $trigger = New-ScheduledTaskTrigger -AtLogOn
     $principal = New-ScheduledTaskPrincipal -GroupId 'BUILTIN\Administrators' -RunLevel Highest
-    Register-ScheduledTask -TaskPath '\lolssd\' -TaskName 'mount' -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null
+    Register-ScheduledTask -TaskPath '\lolssd\' -TaskName 'logon' -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null
 }
 
 # Drivers for a new machine from \drivers on the disk's volumes (Windows Update is off).
@@ -124,26 +110,18 @@ Step 'restart shortcut' {
     $lnk.Save()
 }
 
-# Desktop shortcut that starts the host's desktop (asks for the LUKS password if any).
-# Start menu folder and desktop. The launcher distro is imported at the first logon after
-# a reboot (lolssd-win mount); the host entries need a profile (lolssd profile on the host).
+# The host's Linux in a VM, full screen on every monitor (lolssd-win desktop; needs a profile:
+# lolssd profile on the host). Start menu folder and desktop.
 Step 'Linux shortcuts' {
     $shell = New-Object -ComObject WScript.Shell
     $menu = "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Linux"
     New-Item -ItemType Directory -Force $menu | Out-Null
-    $links = @(
-        @('Linux terminal (SSD)', '-d lolssd', 'Shell in the Arch system that lives on this disk'),
-        @('Linux shell (host)', '-d lolssd -u root -- /usr/local/bin/lolssd-wsl shell', "The host's own Linux: your shell and files"),
-        @('Linux desktop (host)', 'desktop', "The host's Hyprland, full screen on every monitor", "$env:ProgramFiles\lolssd\lolssd-win.exe")
-    )
-    foreach ($l in $links) {
-        foreach ($dir in $menu, "$env:PUBLIC\Desktop") {
-            $lnk = $shell.CreateShortcut("$dir\$($l[0]).lnk")
-            $lnk.TargetPath = if ($l.Count -gt 3) { $l[3] } else { "$env:SystemRoot\System32\wsl.exe" }
-            $lnk.Arguments = $l[1]
-            $lnk.Description = $l[2]
-            $lnk.Save()
-        }
+    foreach ($dir in $menu, "$env:PUBLIC\Desktop") {
+        $lnk = $shell.CreateShortcut("$dir\Linux desktop (host).lnk")
+        $lnk.TargetPath = "$env:ProgramFiles\lolssd\lolssd-win.exe"
+        $lnk.Arguments = 'desktop'
+        $lnk.Description = "The host's Linux in a VM, full screen on every monitor"
+        $lnk.Save()
     }
 }
 

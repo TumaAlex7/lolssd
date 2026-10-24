@@ -51,7 +51,7 @@ func TestHDAArgs(t *testing.T) {
 
 func TestQEMUArgs(t *testing.T) {
 	v := VM{Kernel: `C:\k`, Initrd: `C:\i`, Cmdline: "root=UUID=x rw", MemMiB: 8192, CPUs: 10,
-		Disks:    []VMDisk{{Path: `\\.\PhysicalDrive1`, Model: "SAMSUNG MZVL8512HELU-00BTW", Serial: "S7J1NX0X598346"}},
+		Disks:    []VMDisk{{Path: `\\.\PhysicalDrive1`, Model: "NVMe Test Disk", Serial: "S0LSSD0TEST0001"}},
 		Monitors: []hostprofile.WinMonitor{{Width: 2560, Height: 1600}, {X: 2560, Width: 1920, Height: 1080}},
 		AudioPCI: "0000:03:00.6", SerialLog: `C:\s.log`, QMPPort: 4444}
 	a := QEMUArgs(v)
@@ -60,7 +60,7 @@ func TestQEMUArgs(t *testing.T) {
 		"-accel\x00whpx\x00",
 		"-cpu\x00max,vmx=off,svm=off",
 		"if=none,id=disk0,format=raw,file=\\\\.\\PhysicalDrive1",
-		"nvme,drive=disk0,serial=S7J1NX0X598346,model=SAMSUNG MZVL8512HELU-00BTW",
+		"nvme,drive=disk0,serial=S0LSSD0TEST0001,model=NVMe Test Disk",
 		"virtio-gpu-pci,id=video0,max_outputs=2,xres=2560,yres=1600",
 		"q35,vmport=off",
 		"127.0.0.1:1,id=vnc0,display=video0,head=0",

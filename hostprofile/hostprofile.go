@@ -21,15 +21,10 @@ type Profile struct {
 		Home  string `json:"home"`
 		Shell string `json:"shell"`
 	} `json:"user"`
-	Desktop    string    `json:"desktop"`
-	HyprConfig string    `json:"hypr_config,omitempty"`
-	MesaD3D12  bool      `json:"mesa_d3d12"`
-	MemMiB     int       `json:"mem_mib"`
-	Mounts     []Mount   `json:"mounts"`
-	Swaps      []Swap    `json:"swaps"`
-	Monitors   []Monitor `json:"monitors"`
-	Keyboard   Keyboard  `json:"keyboard"`
-	VM         *VMImage  `json:"vm,omitempty"`
+	Mounts   []Mount  `json:"mounts"`
+	Swaps    []Swap   `json:"swaps"`
+	Keyboard Keyboard `json:"keyboard"`
+	VM       *VMImage `json:"vm,omitempty"`
 	// AudioPCI — PCI-адрес встроенной звуковой карты (HDA с аналоговым кодеком), например
 	// 0000:03:00.6. Звуковая карта ВМ ставится на тот же адрес: имена устройств PipeWire
 	// (alsa_output.pci-0000_03_00.6...) и настройки, завязанные на них, совпадают.
@@ -48,11 +43,7 @@ type VMImage struct {
 // Keyboard — раскладка (RMLVO композитора) и конфиги keyd как есть: разбирает их пакет keymap
 // на той стороне, где применяет.
 type Keyboard struct {
-	Layout  string            `json:"layout,omitempty"`
-	Variant string            `json:"variant,omitempty"`
-	Options string            `json:"options,omitempty"`
-	Model   string            `json:"model,omitempty"`
-	Keyd    map[string]string `json:"keyd,omitempty"`
+	Keyd map[string]string `json:"keyd,omitempty"`
 }
 
 type Mount struct {
@@ -88,18 +79,6 @@ type Swap struct {
 	Device BlockDev `json:"device"`
 }
 
-type Monitor struct {
-	Port    string  `json:"port"`
-	EDID    []byte  `json:"edid"`
-	Desc    string  `json:"desc,omitempty"`
-	X       int     `json:"x"`
-	Y       int     `json:"y"`
-	Width   int     `json:"width,omitempty"`
-	Height  int     `json:"height,omitempty"`
-	Scale   float64 `json:"scale,omitempty"`
-	Refresh float64 `json:"refresh,omitempty"`
-}
-
 // PartUUIDs возвращает PARTUUID всех разделов, на которых лежат файловые системы и swap профиля:
 // по ним Windows находит диски хоста.
 func (p Profile) PartUUIDs() []string {
@@ -122,8 +101,7 @@ func (p Profile) PartUUIDs() []string {
 	return res
 }
 
-// WinMonitor — активный монитор Windows. Список пишет lolssd-win mount в monitors.json;
-// порядок в нём задаёт номер вложенного выхода Hyprland: первый — WAYLAND-1 и т. д.
+// WinMonitor — активный монитор Windows; ВМ получает по выходу virtio-gpu на каждый, слева направо.
 type WinMonitor struct {
 	Name    string  `json:"name"`
 	EDID    []byte  `json:"edid"`
@@ -133,10 +111,4 @@ type WinMonitor struct {
 	Height  int     `json:"height"`
 	Refresh float64 `json:"refresh"`
 	Primary bool    `json:"primary"`
-}
-
-// SameMonitor сравнивает базовый блок EDID (первые 128 байт): DRM в Linux и реестр Windows
-// могут отдавать разный набор блоков расширения.
-func SameMonitor(a, b []byte) bool {
-	return len(a) >= 128 && len(b) >= 128 && string(a[:128]) == string(b[:128])
 }

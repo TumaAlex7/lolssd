@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"os/user"
 	"path/filepath"
 	"strconv"
@@ -14,7 +13,6 @@ import (
 	"time"
 
 	"lolssd/hostprofile"
-	"lolssd/keymap"
 )
 
 // Типы профиля общие с Windows-частью, см. пакет hostprofile.
@@ -24,7 +22,6 @@ type (
 	blockDev = hostprofile.BlockDev
 	disk     = hostprofile.Disk
 	swap     = hostprofile.Swap
-	monitor  = hostprofile.Monitor
 )
 
 var hostFS = map[string]bool{"ext4": true, "ext3": true, "btrfs": true, "xfs": true, "f2fs": true}
@@ -66,31 +63,6 @@ func runProfile() int {
 	p.User.GID, _ = strconv.Atoi(u.Gid)
 	p.User.Shell = os.Getenv("SHELL")
 
-	p.Desktop = os.Getenv("XDG_CURRENT_DESKTOP")
-	cfg := os.Getenv("XDG_CONFIG_HOME")
-	if cfg == "" {
-		cfg = filepath.Join(u.HomeDir, ".config")
-	}
-	for _, f := range []string{"hyprland.lua", "hyprland.conf"} {
-		if _, err := os.Stat(filepath.Join(cfg, "hypr", f)); err == nil {
-			p.HyprConfig = filepath.Join(cfg, "hypr", f)
-			break
-		}
-	}
-	for _, d := range []string{"/usr/lib/dri", "/usr/lib64/dri", "/usr/lib/x86_64-linux-gnu/dri"} {
-		if _, err := os.Stat(filepath.Join(d, "d3d12_dri.so")); err == nil {
-			p.MesaD3D12 = true
-		}
-	}
-
-	meminfo, _ := os.ReadFile("/proc/meminfo")
-	for _, line := range strings.Split(string(meminfo), "\n") {
-		if f := strings.Fields(line); len(f) >= 2 && f[0] == "MemTotal:" {
-			kb, _ := strconv.Atoi(f[1])
-			p.MemMiB = kb / 1024
-		}
-	}
-
 	ssdDisk := ""
 	if dev, err := exeBlockDev(); err == nil {
 		ssdDisk = filepath.Base(filepath.Dir(dev))
@@ -101,7 +73,6 @@ func runProfile() int {
 		return 1
 	}
 	p.Swaps = hostSwaps()
-	p.Monitors = hostMonitors()
 	p.Keyboard = hostKeyboard()
 	p.AudioPCI = hostAudioPCI()
 
@@ -132,18 +103,8 @@ func runProfile() int {
 	for _, m := range p.Mounts {
 		fmt.Printf("  %-12s %-6s %s\n", m.Target, m.FSType, describe(m.Device))
 	}
-	plan := keymap.Build(keymap.ParseKeyd(p.Keyboard.Keyd))
-	if len(plan.Chords) > 0 || len(plan.Scancodes) > 0 {
-		fmt.Printf("  переназначения клавиш keyd: %d в Windows, сочетаний для Hyprland: %d\n", len(plan.Scancodes), len(plan.Chords))
-	}
-	for _, n := range plan.Notes {
-		fmt.Println("  не переносится в Windows:", n)
-	}
 	if p.VM != nil {
 		fmt.Printf("  образ для ВМ: %s (ядро %s)\n", filepath.Join(dir, p.VM.Path), p.VM.Kernel)
-	}
-	if !p.MesaD3D12 {
-		fmt.Println("  внимание: в Mesa нет драйвера d3d12, внутри Windows графика будет без ускорения")
 	}
 	return 0
 }
@@ -374,65 +335,9 @@ func hostSwaps() []swap {
 	return res
 }
 
-// hostMonitors берёт подключённые мониторы из DRM (порт и сырой EDID — для сопоставления
-// с мониторами в Windows), а раскладку и масштаб — из Hyprland, если он запущен.
-func hostMonitors() []monitor {
-	conns, _ := filepath.Glob("/sys/class/drm/card*-*")
-	var res []monitor
-	for _, c := range conns {
-		if strings.TrimSpace(readFile(filepath.Join(c, "status"))) != "connected" {
-			continue
-		}
-		_, port, _ := strings.Cut(filepath.Base(c), "-")
-		edid, _ := os.ReadFile(filepath.Join(c, "edid"))
-		res = append(res, monitor{Port: port, EDID: edid})
-	}
-
-	if os.Getenv("HYPRLAND_INSTANCE_SIGNATURE") == "" {
-		return res
-	}
-	out, err := exec.Command("hyprctl", "monitors", "-j").Output()
-	if err != nil {
-		return res
-	}
-	var hypr []struct {
-		Name        string  `json:"name"`
-		Description string  `json:"description"`
-		X           int     `json:"x"`
-		Y           int     `json:"y"`
-		Width       int     `json:"width"`
-		Height      int     `json:"height"`
-		Scale       float64 `json:"scale"`
-		RefreshRate float64 `json:"refreshRate"`
-	}
-	if json.Unmarshal(out, &hypr) != nil {
-		return res
-	}
-	for i := range res {
-		for _, h := range hypr {
-			if h.Name == res[i].Port {
-				res[i].Desc, res[i].X, res[i].Y = h.Description, h.X, h.Y
-				res[i].Width, res[i].Height, res[i].Scale, res[i].Refresh = h.Width, h.Height, h.Scale, h.RefreshRate
-			}
-		}
-	}
-	return res
-}
-
-// hostKeyboard: раскладка из Hyprland, если он запущен, и все конфиги keyd.
+// hostKeyboard: все конфиги keyd — в ВМ keyd получает их сведёнными (keymap.VMConfig).
 func hostKeyboard() hostprofile.Keyboard {
 	var kb hostprofile.Keyboard
-	if os.Getenv("HYPRLAND_INSTANCE_SIGNATURE") != "" {
-		for opt, dst := range map[string]*string{"kb_layout": &kb.Layout, "kb_variant": &kb.Variant, "kb_options": &kb.Options, "kb_model": &kb.Model} {
-			out, err := exec.Command("hyprctl", "-j", "getoption", "input:"+opt).Output()
-			var v struct {
-				Str string `json:"str"`
-			}
-			if err == nil && json.Unmarshal(out, &v) == nil && v.Str != "[[EMPTY]]" {
-				*dst = v.Str
-			}
-		}
-	}
 	files, _ := filepath.Glob("/etc/keyd/*.conf")
 	for _, f := range files {
 		if b, err := os.ReadFile(f); err == nil {

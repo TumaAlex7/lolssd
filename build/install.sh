@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# lolssd: установить Windows на внешний SSD из Linux через QEMU (docs/PROTOTYPE.md).
-#   sudo build/prototype/vm-install.sh /dev/sdX dist/iso/lolssd-*.iso [РАЗМЕР_ПОД_WINDOWS, например 128G]
+# lolssd: установить Windows на внешний SSD из Linux через QEMU (README.md, «Установка»).
+#   sudo build/install.sh /dev/sdX dist/iso/lolssd-*.iso [РАЗМЕР_ПОД_WINDOWS, например 128G]
 # ISO собирается заранее: make iso ISO=... — в нём уже всё: файл ответов, наши файлы, драйверы.
 # Скрипт размечает диск: ESP, раздел LOLSSD (утилита для Linux и профили), место под Windows.
 # Без размера Windows отдаётся весь остаток диска; с размером — столько гигабайт, а остаток

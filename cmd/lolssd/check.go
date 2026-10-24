@@ -66,7 +66,7 @@ func check() int {
 	_, kvmErr := os.Stat("/dev/kvm")
 	switch {
 	case !hasVirt:
-		report("FAIL", "Виртуализация", "SVM / VT-x не видна: выключена в BIOS или не поддерживается (нужна для VBS/HVCI и WSL)")
+		report("FAIL", "Виртуализация", "SVM / VT-x не видна: выключена в BIOS или не поддерживается (нужна для VBS/HVCI и ВМ с Linux хоста)")
 	case kvmErr == nil:
 		report("OK", "Виртуализация", "включена")
 	default:
