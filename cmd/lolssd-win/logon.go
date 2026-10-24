@@ -25,11 +25,8 @@ import (
 )
 
 // logon — задание при входе пользователя (с повышенными правами; в заданиях старых систем
-// команда называется mount): ярлыки, расширенный рабочий стол вместо дублирования мониторов,
-// Scancode Map для ВМ и уборка остатков режима WSL. Профиля для этого компьютера нет — режим «Linux внутри Windows» не включали.
+// расширенный рабочий стол вместо дублирования мониторов, C: на весь диск, Scancode Map для ВМ. Профиля для этого компьютера нет — режим «Linux внутри Windows» не включали.
 func logon() int {
-	fixShortcuts()
-	removeWSL()
 	extendDisplays()
 	growSystemDrive()
 	vol, err := lolssdVolume()
@@ -145,26 +142,6 @@ func findProfile(vol string) (hostprofile.Profile, []hostDisk, error) {
 	return best, disks, nil
 }
 
-// removeWSL убирает остатки режима WSL у систем, установленных раньше: пусковой дистрибутив
-// (регистрируется на пользователя, поэтому здесь, при входе) и его файлы. Сам WSL остаётся.
-func removeWSL() {
-	dir := filepath.Join(os.Getenv("ProgramData"), "lolssd", "wsl")
-	if _, err := os.Stat(dir); err != nil {
-		return
-	}
-	if out, err := hidden(5*time.Minute, "wsl.exe", "--unregister", "lolssd").CombinedOutput(); err != nil {
-		log.Printf("wsl --unregister lolssd: %v %s", err, strings.ReplaceAll(string(out), "\x00", ""))
-	}
-	if err := os.RemoveAll(dir); err != nil {
-		log.Println("удаление", dir, err)
-		return
-	}
-	for _, f := range []string{"active-profile.json", "monitors.json"} {
-		os.Remove(filepath.Join(os.Getenv("ProgramData"), "lolssd", f))
-	}
-	log.Println("режим WSL убран")
-}
-
 var procMessageBox = user32.NewProc("MessageBoxW")
 
 // vmScancodes — Scancode Map Windows для ВМ. Клавиши переназначает keyd самой системы в ВМ, и
@@ -210,43 +187,47 @@ func hidden(timeout time.Duration, name string, args ...string) *exec.Cmd {
 	return cmd
 }
 
-// fixShortcuts доводит ярлыки систем, установленных раньше, до текущих: ярлык рабочего стола Linux
-// ведёт в lolssd-win desktop (раньше — прямо в wsl.exe), есть задание и ярлык перезагрузки в
-// эту Windows. Новые системы получают всё это от lolssd-setup.ps1.
-func fixShortcuts() {
-	exe := filepath.Join(os.Getenv("ProgramFiles"), "lolssd", "lolssd-win.exe")
-	script := `$exe = '` + exe + `'
+// shortcuts раскладывает ярлыки lolssd при установке Windows (lolssd-setup.ps1):
+//   - «Linux» (рабочий стол хоста в ВМ, lolssd-win desktop) и «Linux terminal» (консоль,
+//     lolssd-win terminal) — в корне «Пуска» и на общем рабочем столе, со своими значками;
+//     на сервере (VARIANT=server) их нет;
+//   - «Restart into Windows (SSD)» — во встроенной папке «Служебные — Windows» (System Tools),
+//     с системным значком.
+func shortcuts() int {
+	prog := filepath.Join(os.Getenv("ProgramFiles"), "lolssd")
+	variant := strings.TrimSpace(readFirstLine(filepath.Join(os.Getenv("SystemRoot"), "Setup", "Scripts", "lolssd-variant.txt")))
+	script := `$prog = '` + prog + `'
+$exe = "$prog\lolssd-win.exe"
+$server = '` + variant + `' -eq 'server'
 $s = New-Object -ComObject WScript.Shell
-foreach ($d in "$env:PUBLIC\Desktop", "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Linux") {
-  $p = "$d\Linux desktop (host).lnk"
-  if (-not (Test-Path $p)) { continue }
-  $l = $s.CreateShortcut($p)
-  if ($l.TargetPath -eq $exe) { continue }
-  $l.TargetPath = $exe; $l.Arguments = 'desktop'
-  $l.Description = "The host's Hyprland, full screen on every monitor"
-  $l.Save(); "fixed $p"
+$menu = "$env:ProgramData\Microsoft\Windows\Start Menu\Programs"
+function Link($path, $arguments, $desc, $icon) {
+  $l = $s.CreateShortcut($path)
+  $l.TargetPath = $exe; $l.Arguments = $arguments; $l.Description = $desc; $l.IconLocation = $icon
+  $l.Save()
 }
-# Перезагрузка обратно в эту Windows: ярлык ведёт в lolssd-win.exe restart (права — через UAC).
-# Задание \lolssd\restart от прежних версий больше не нужно, как и ярлыки режима WSL.
-Unregister-ScheduledTask -TaskPath '\lolssd\' -TaskName 'restart' -Confirm:$false -ErrorAction SilentlyContinue
-foreach ($d in "$env:PUBLIC\Desktop", "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Linux") {
-  foreach ($n in 'Linux terminal (SSD)', 'Linux shell (host)') {
-    if (Test-Path "$d\$n.lnk") { Remove-Item "$d\$n.lnk"; "removed $d\$n.lnk" }
+New-Item -ItemType Directory -Force "$menu\System Tools" | Out-Null
+Link "$menu\System Tools\Restart into Windows (SSD).lnk" 'restart' 'Restart straight back into this Windows instead of the host system' "$env:SystemRoot\System32\shell32.dll,238"
+if (-not $server) {
+  foreach ($d in $menu, "$env:PUBLIC\Desktop") {
+    Link "$d\Linux.lnk" 'desktop' "The host's Linux in a VM, full screen on every monitor" "$prog\linux.ico,0"
+    Link "$d\Linux terminal.lnk" 'terminal' "The host's Linux in a VM, console only" "$prog\terminal.ico,0"
   }
-}
-$p = "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Restart into Windows (SSD).lnk"
-$l = $s.CreateShortcut($p)
-if ($l.TargetPath -ne $exe -or $l.Arguments -ne 'restart') {
-  $l.TargetPath = $exe; $l.Arguments = 'restart'
-  $l.Description = 'Restart straight back into this Windows instead of the host system'
-  $l.IconLocation = "$env:SystemRoot\System32\shell32.dll,238"
-  $l.Save(); "updated $p"
 }`
-	out, err := hidden(time.Minute, "powershell.exe", "-NoProfile", "-NonInteractive", "-Command",
-		script).CombinedOutput()
-	if err != nil || len(out) > 0 {
-		log.Printf("ярлыки: %v %s", err, strings.TrimSpace(string(out)))
+	out, err := hidden(time.Minute, "powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script).CombinedOutput()
+	if msg := strings.TrimSpace(string(out)); err != nil || msg != "" {
+		log.Printf("ярлыки: %v %s", err, strings.ReplaceAll(msg, "\r\n", "; "))
 	}
+	if err != nil {
+		return 1
+	}
+	return 0
+}
+
+func readFirstLine(path string) string {
+	b, _ := os.ReadFile(path)
+	line, _, _ := strings.Cut(string(b), "\n")
+	return line
 }
 
 // lolssdVolume находит том раздела LOLSSD по метке ФС и возвращает его корень, например `D:\`.

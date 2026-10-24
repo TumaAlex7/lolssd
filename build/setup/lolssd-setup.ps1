@@ -105,32 +105,14 @@ Step 'register driver install task' {
     Register-ScheduledTask -TaskPath '\lolssd\' -TaskName 'drivers' -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null
 }
 
-# "Restart into Windows (SSD)": a plain restart boots the host's own system, because
-# nvram-guard keeps this SSD out of BootOrder. lolssd-win restart sets BootNext to the SSD and
-# restarts; it asks for admin rights (UAC) itself.
-Step 'restart shortcut' {
-    $lnk = (New-Object -ComObject WScript.Shell).CreateShortcut("$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Restart into Windows (SSD).lnk")
-    $lnk.TargetPath = "$env:ProgramFiles\lolssd\lolssd-win.exe"
-    $lnk.Arguments = 'restart'
-    $lnk.Description = 'Restart straight back into this Windows instead of the host system'
-    $lnk.IconLocation = "$env:SystemRoot\System32\shell32.dll,238"
-    $lnk.Save()
+# Shortcuts (lolssd-win shortcuts): "Restart into Windows (SSD)" in
+# System Tools -- a plain restart boots the host's own system, because nvram-guard keeps this
+# SSD out of BootOrder; and, on the SSD variant, "Linux" (the host's desktop in a VM) and
+# "Linux terminal" in the Start menu root and on the desktop.
+Step 'shortcuts' {
+    $p = Start-Process "$env:ProgramFiles\lolssd\lolssd-win.exe" -ArgumentList 'shortcuts' -Wait -PassThru
+    if ($p.ExitCode -ne 0) { throw "lolssd-win shortcuts exited with $($p.ExitCode)" }
 }
-
-# The host's Linux in a VM, full screen on every monitor (lolssd-win desktop; needs a profile:
-# lolssd profile on the host). Start menu folder and desktop.
-if ($variant -eq 'ssd') { Step 'Linux shortcuts' {
-    $shell = New-Object -ComObject WScript.Shell
-    $menu = "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Linux"
-    New-Item -ItemType Directory -Force $menu | Out-Null
-    foreach ($dir in $menu, "$env:PUBLIC\Desktop") {
-        $lnk = $shell.CreateShortcut("$dir\Linux desktop (host).lnk")
-        $lnk.TargetPath = "$env:ProgramFiles\lolssd\lolssd-win.exe"
-        $lnk.Arguments = 'desktop'
-        $lnk.Description = "The host's Linux in a VM, full screen on every monitor"
-        $lnk.Save()
-    }
-}}
 
 # ---------------------------------------------------------------- tiny
 # Runs before the first logon, so removing the provisioned packages is enough: no user has

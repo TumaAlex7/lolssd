@@ -34,7 +34,7 @@ func main() {
 	switch os.Args[1] {
 	case "nvram-guard":
 		os.Exit(nvramGuard())
-	case "logon", "mount": // mount — имя в заданиях систем, установленных до перехода на ВМ
+	case "logon":
 		os.Exit(logon())
 	case "desktop":
 		os.Exit(desktop())
@@ -42,6 +42,8 @@ func main() {
 		os.Exit(vmHost(false))
 	case "terminal":
 		os.Exit(terminal())
+	case "shortcuts":
+		os.Exit(shortcuts())
 	case "restart":
 		os.Exit(restartSelf())
 	default:
@@ -50,6 +52,6 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: lolssd-win nvram-guard | logon | desktop | terminal | vm | restart")
+	fmt.Fprintln(os.Stderr, "usage: lolssd-win nvram-guard | logon | shortcuts | desktop | terminal | vm | restart")
 	os.Exit(2)
 }

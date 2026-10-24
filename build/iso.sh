@@ -12,7 +12,7 @@
 #   - наши файлы лежат прямо в образе Windows, установщик ничего не докачивает и не копирует:
 #       \Windows\Setup\Scripts\   SetupComplete.cmd, lolssd-setup.ps1, lolssd.reg
 #       \Program Files\lolssd\    lolssd-win.exe, lolssd-drivers.ps1, vncviewer.exe (TigerVNC),
-#                                 значок ярлыка Linux (build/art),
+#                                 значки ярлыков Linux (build/art),
 #                                 qemu\ (QEMU для ВМ с системой хоста, make qemu),
 #                                 tap\ (драйвер TAP-Windows для её сети, make tap)
 #       \Drivers\                 INF-драйверы (если указаны)
@@ -116,7 +116,7 @@ fi
 	[[ -s $viewer ]] && echo "add '$viewer' '/Program Files/lolssd/vncviewer.exe'"
 	# Значок ярлыка Linux и обои: обои по умолчанию для новых пользователей, их варианты под
 	# разрешения и экран блокировки (wallpaper выше).
-	echo "add '$repo/build/art/linux.ico' '/Program Files/lolssd/linux.ico'"
+	for i in linux terminal; do echo "add '$repo/build/art/$i.ico' '/Program Files/lolssd/$i.ico'"; done
 	echo "add '$wall/img0.jpg' '/Windows/Web/Wallpaper/Windows/img0.jpg'"
 	for f in "$wall"/img0_*.jpg; do echo "add '$f' '/Windows/Web/4K/Wallpaper/Windows/$(basename "$f")'"; done
 	echo "add '$wall/img100.jpg' '/Windows/Web/Screen/img100.jpg'"
