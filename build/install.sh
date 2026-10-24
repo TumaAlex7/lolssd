@@ -22,7 +22,7 @@ if [[ $# == 3 ]]; then
 	win_gib=${BASH_REMATCH[1]}
 	(( win_gib >= 40 )) || die "под Windows с лолкой нужно не меньше 40G"
 fi
-repo=$(cd "$(dirname "$0")/../.." && pwd)
+repo=$(cd "$(dirname "$0")/.." && pwd)
 name=$(basename "$dev")
 
 [[ $EUID == 0 ]] || die "нужен root (sudo)"

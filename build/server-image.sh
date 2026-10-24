@@ -31,9 +31,14 @@ if [[ ! -d $drv/Display.Driver ]]; then
 	7z x -y -o"$drv" "$exe" Display.Driver >/dev/null
 fi
 
-echo "== серверный ISO ($edition)"
-make iso ISO="$src" VARIANT=server DRIVERS="$out/drivers" EDITION="$edition"
 iso=dist/iso/lolssd-server-$(basename "$src")
+if [[ -f $iso && -z ${REBUILD:-} ]]; then
+	echo "== серверный ISO уже собран: $iso (REBUILD=1 — собрать заново)"
+	make dist >/dev/null
+else
+	echo "== серверный ISO ($edition)"
+	make iso ISO="$src" VARIANT=server DRIVERS="$out/drivers" EDITION="$edition"
+fi
 
 echo "== установка Windows в образ (нужен sudo; QEMU без окна, VNC 127.0.0.1:5909)"
 rm -f "$out/lolssd-server.img" "$out/lolssd-server.img.gz"
