@@ -32,8 +32,9 @@ tap:
 	build/tap.sh
 
 # Установочный ISO со всем внутри: make iso ISO=~/Downloads/Win11.iso [DRIVERS=~/lolssd-drivers] [EDITION="Windows 11 Pro"]
+# [VARIANT=server] (Windows с Sunshine на диск сервера, см. build/install.sh) [RIOT=0] (без Riot).
 EDITION ?= Windows 11 Home
-iso: dist qemu tap
+iso: dist $(if $(filter server,$(VARIANT)),,qemu tap)
 	@test -n "$(ISO)" || { echo "укажите ISO=путь/к/Windows.iso"; exit 1; }
 	build/iso.sh "$(ISO)" "$(DRIVERS)" "$(EDITION)"
 

@@ -28,6 +28,11 @@ die() { echo "ошибка: $*" >&2; exit 1; }
 src=$(realpath "$1")
 drivers=${2:-}
 edition=${3:-Windows 11 Home}
+# VARIANT=server — Windows на внутренний диск сервера (build/install.sh с SERVER=1): без ВМ с Linux,
+# с Sunshine, установка без вопросов. RIOT=0 — без установки Riot Client при первом входе.
+variant=${VARIANT:-ssd}
+riot=${RIOT:-1}
+[[ $variant == ssd || $variant == server ]] || die "VARIANT — ssd или server"
 repo=$(cd "$(dirname "$0")/.." && pwd)
 dist=$repo/dist
 out=$dist/iso/lolssd-$(basename "$src")
@@ -94,6 +99,16 @@ if command -v magick >/dev/null; then
 else
 	echo "  (нет ImageMagick — в образе запасные обои из build/art)" >&2
 fi
+echo "$variant" >"$work/variant"
+# Sunshine (сервер): MSI с GitHub LizardByte, один раз на версию.
+if [[ $variant == server ]]; then
+	sv=${SUNSHINE:-v2026.914.233613}
+	sunshine=$dist/cache/Sunshine-$sv-AMD64-installer.msi
+	[[ -s $sunshine ]] || curl -fSL --retry 3 -o "$sunshine.part" \
+		"https://github.com/LizardByte/Sunshine/releases/download/$sv/Sunshine-Windows-AMD64-installer.msi" &&
+		mv "$sunshine.part" "$sunshine" 2>/dev/null || true
+	[[ -s $sunshine ]] || die "Sunshine $sv не скачан"
+fi
 {
 	echo "add '$dist/windows/C/Windows/Setup/Scripts' '/Windows/Setup/Scripts'"
 	echo "add '$dist/windows/lolssd.reg' '/Windows/Setup/Scripts/lolssd.reg'"
@@ -105,12 +120,18 @@ fi
 	echo "add '$wall/img0.jpg' '/Windows/Web/Wallpaper/Windows/img0.jpg'"
 	for f in "$wall"/img0_*.jpg; do echo "add '$f' '/Windows/Web/4K/Wallpaper/Windows/$(basename "$f")'"; done
 	echo "add '$wall/img100.jpg' '/Windows/Web/Screen/img100.jpg'"
-	if [[ -f $dist/tap/OemVista.inf ]]; then
+	echo "add '$work/variant' '/Windows/Setup/Scripts/lolssd-variant.txt'"
+	[[ $variant != server ]] || echo "add '$sunshine' '/Program Files/lolssd/sunshine.msi'"
+	if [[ $variant == server ]]; then
+		:
+	elif [[ -f $dist/tap/OemVista.inf ]]; then
 		echo "add '$dist/tap' '/Program Files/lolssd/tap'"
 	else
 		echo "  (нет dist/tap — ВМ без сети через TAP, zapret в ней не заработает; make tap)" >&2
 	fi
-	if [[ -f $dist/qemu/qemu-system-x86_64w.exe ]]; then
+	if [[ $variant == server ]]; then
+		:
+	elif [[ -f $dist/qemu/qemu-system-x86_64w.exe ]]; then
 		echo "add '$dist/qemu' '/Program Files/lolssd/qemu'"
 	else
 		echo "  (нет dist/qemu — в образе не будет рабочего стола Linux; make qemu)" >&2
@@ -128,6 +149,63 @@ if (( size > 4000 * 1024 * 1024 )); then
 fi
 
 cp "$repo/build/setup/autounattend.xml" "$work/tree/autounattend.xml"
+# Сервер: установка без вопросов — язык, общий ключ установки редакции (без активации), раздел
+# Windows (4-й: EFI, LOLSSD, MSR, Windows — так размечает build/install.sh с SERVER=1).
+if [[ $variant == server ]]; then
+	case $edition in
+	*Pro*) key=VK7JG-NPHTM-C97JM-9MPGT-3V66T ;;
+	*Home*) key=YTMG3-N6DKC-DKB77-7M9GH-8HVX7 ;;
+	*) die "общий ключ для «$edition» неизвестен" ;;
+	esac
+	python3 - "$work/tree/autounattend.xml" "$key" <<'PY'
+import sys
+p, key = sys.argv[1], sys.argv[2]
+s = open(p, encoding="utf-8").read()
+s = s.replace("""      <UserData>
+        <AcceptEula>true</AcceptEula>
+      </UserData>""", """      <UserData>
+        <AcceptEula>true</AcceptEula>
+        <ProductKey>
+          <Key>""" + key + """</Key>
+          <WillShowUI>OnError</WillShowUI>
+        </ProductKey>
+      </UserData>
+      <ImageInstall>
+        <OSImage>
+          <InstallTo>
+            <DiskID>0</DiskID>
+            <PartitionID>4</PartitionID>
+          </InstallTo>
+          <WillShowUI>OnError</WillShowUI>
+        </OSImage>
+      </ImageInstall>""", 1)
+s = s.replace("""  <settings pass="windowsPE">
+""", """  <settings pass="windowsPE">
+    <component name="Microsoft-Windows-International-Core-WinPE" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+      <SetupUILanguage>
+        <UILanguage>en-US</UILanguage>
+      </SetupUILanguage>
+      <InputLocale>en-US</InputLocale>
+      <SystemLocale>en-US</SystemLocale>
+      <UILanguage>en-US</UILanguage>
+      <UserLocale>en-US</UserLocale>
+    </component>
+""", 1)
+s = s.replace("<ComputerName>lolssd</ComputerName>", "<ComputerName>lolssd-server</ComputerName>")
+assert "<ImageInstall>" in s and "International-Core-WinPE" in s
+open(p, "w", encoding="utf-8").write(s)
+PY
+fi
+if [[ $riot == 0 ]]; then
+	python3 - "$work/tree/autounattend.xml" <<'PY'
+import re, sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s, n = re.subn(r"\s*<FirstLogonCommands>.*?</FirstLogonCommands>", "", s, flags=re.S)
+assert n == 1
+open(p, "w", encoding="utf-8").write(s)
+PY
+fi
 
 echo "6/6 сборка ISO"
 mkdir -p "$(dirname "$out")"

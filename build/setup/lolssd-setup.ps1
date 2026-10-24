@@ -32,6 +32,13 @@ function Run($exe) {
     if ($LASTEXITCODE -ne 0) { throw "$exe $args exited with $LASTEXITCODE" }
 }
 
+# ssd: Windows on the external SSD with the host's Linux in a VM; server: Windows on a server's
+# internal disk with Sunshine, installed unattended (build/iso.sh VARIANT=server).
+$variant = (Get-Content "$env:SystemRoot\Setup\Scripts\lolssd-variant.txt" -ErrorAction SilentlyContinue | Select-Object -First 1)
+if (-not $variant) { $variant = 'ssd' }
+$variant = $variant.Trim()
+Log "variant $variant"
+
 # The registry blocks creating hiberfil.sys; this also removes one setup may have left.
 Step 'hibernation off' {
     Run powercfg.exe /hibernate off
@@ -112,7 +119,7 @@ Step 'restart shortcut' {
 
 # The host's Linux in a VM, full screen on every monitor (lolssd-win desktop; needs a profile:
 # lolssd profile on the host). Start menu folder and desktop.
-Step 'Linux shortcuts' {
+if ($variant -eq 'ssd') { Step 'Linux shortcuts' {
     $shell = New-Object -ComObject WScript.Shell
     $menu = "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Linux"
     New-Item -ItemType Directory -Force $menu | Out-Null
@@ -123,7 +130,7 @@ Step 'Linux shortcuts' {
         $lnk.Description = "The host's Linux in a VM, full screen on every monitor"
         $lnk.Save()
     }
-}
+}}
 
 # ---------------------------------------------------------------- tiny
 # Runs before the first logon, so removing the provisioned packages is enough: no user has
@@ -190,6 +197,42 @@ Step 'fallback boot path on the ESP' {
             Copy-Item 'S:\EFI\Microsoft\Boot\bootmgfw.efi' 'S:\EFI\BOOT\BOOTX64.EFI'
         }
     } finally { mountvol.exe S: /D | Out-Null }
+}
+
+# ---------------------------------------------------------------- server
+if ($variant -eq 'server') {
+    # Sunshine (game streaming host for Moonlight): installs its service and firewall rules.
+    # The web UI asks for a user name and password on the first visit, https://<server>:47990.
+    Step 'Sunshine' {
+        $msi = "$env:ProgramFiles\lolssd\sunshine.msi"
+        if (-not (Test-Path $msi)) { throw "$msi not found" }
+        $p = Start-Process msiexec.exe -ArgumentList '/i', "`"$msi`"", '/qn', '/norestart' -Wait -PassThru
+        if ($p.ExitCode -notin 0, 3010) { throw "msiexec exited with $($p.ExitCode)" }
+    }
+
+    # A Moonlight app that reboots the server: nvram-guard keeps Windows out of BootOrder, so
+    # this lands in Linux.
+    Step 'Sunshine app: Reboot to Linux' {
+        $apps = "$env:ProgramFiles\Sunshine\config\apps.json"
+        $j = if (Test-Path $apps) { Get-Content $apps -Raw | ConvertFrom-Json } else { [pscustomobject]@{ env = @{}; apps = @() } }
+        if (-not ($j.apps | Where-Object { $_.name -eq 'Reboot to Linux' })) {
+            $j.apps = @($j.apps) + [pscustomobject]@{ name = 'Reboot to Linux'; detached = @('shutdown.exe /r /t 3') }
+            $j | ConvertTo-Json -Depth 10 | Set-Content $apps -Encoding UTF8
+        }
+    }
+
+    # A server: never sleep, never turn the monitor off (Sunshine needs an active display).
+    Step 'never sleep' {
+        foreach ($k in 'standby-timeout-ac', 'standby-timeout-dc', 'monitor-timeout-ac', 'monitor-timeout-dc') {
+            Run powercfg.exe /change $k 0
+        }
+    }
+
+    # The install runs unattended in a VM; power it off when done, the first logon (and the
+    # Riot installer) happens on the server itself.
+    Step 'power off after setup' {
+        Run shutdown.exe /s /t 60 /c 'lolssd: setup finished'
+    }
 }
 
 Log "done, $failed step(s) failed"
