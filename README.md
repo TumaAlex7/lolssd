@@ -113,5 +113,11 @@ make test
 
 ## Лицензия
 
-[MIT](LICENSE). В собранный образ попадают сторонние программы под своими лицензиями: QEMU,
+[MIT](LICENSE). Обои по умолчанию — арт K/DA FIRESTARTER из League of Legends (Riot Games): его
+нет в исходниках, сборка скачивает его из релиза [assets](https://github.com/TumaAlex7/lolssd/releases/tag/assets);
+свои — `make iso WALLPAPER=файл_или_ссылка`. В собранный образ попадают сторонние программы под своими лицензиями: QEMU,
 TigerVNC и драйвер TAP-Windows (GPLv2) — они скачиваются при сборке и в репозиторий не входят.
+
+_lolssd isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or
+anyone officially involved in producing or managing Riot Games properties. Riot Games, and all
+associated properties are trademarks or registered trademarks of Riot Games, Inc._

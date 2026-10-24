@@ -6,8 +6,8 @@
 # Что получается (dist/iso/lolssd-<имя исходного ISO>):
 #   - в install.wim только одна редакция: установщик не спрашивает какую;
 #   - из образа удалены Edge, OneDrive и специальные возможности, lolssd.reg применён к его
-#     реестру (build/debloat.sh); обои и экран блокировки — WALLPAPER (по умолчанию обложка клипа
-#     K/DA FIRESTARTER, скачивается при сборке) или запасные из build/art;
+#     реестру (build/debloat.sh); обои и экран блокировки — WALLPAPER (по умолчанию арт K/DA
+#     FIRESTARTER из релиза assets, скачивается при сборке) или запасные из build/art;
 #     приложения и компоненты Windows удаляет DISM в виртуалке установки (lolssd-setup.ps1);
 #   - наши файлы лежат прямо в образе Windows, установщик ничего не докачивает и не копирует:
 #       \Windows\Setup\Scripts\   SetupComplete.cmd, lolssd-setup.ps1, lolssd.reg
@@ -74,10 +74,10 @@ if [[ ! -s $viewer ]]; then
 		mv "$viewer.part" "$viewer" ||
 		echo "  внимание: TigerVNC $vnc не скачан — в образе не будет рабочего стола Linux" >&2
 fi
-# Обои: картинка по ссылке или файл из WALLPAPER (по умолчанию — обложка клипа K/DA FIRESTARTER с
-# официального канала League of Legends; в репозитории её нет — это арт Riot), растянутая под
+# Обои: картинка по ссылке или файл из WALLPAPER (по умолчанию — сплэш-арт скинов K/DA
+# FIRESTARTER в 4K из релиза assets; в исходниках его нет — это арт Riot), подогнанная под
 # разрешения. Не скачалась или нет ImageMagick — свои обои из build/art.
-wallsrc=${WALLPAPER:-https://i.ytimg.com/vi/Mmw-PpWhKFg/maxresdefault.jpg}
+wallsrc=${WALLPAPER:-https://github.com/TumaAlex7/lolssd/releases/download/assets/kda-firestarter-4k.jpg}
 wall=$repo/build/art
 if command -v magick >/dev/null; then
 	pic=$wallsrc
