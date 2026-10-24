@@ -19,9 +19,9 @@ func VNCPort(i int) int { return 5901 + i }
 func ViewerArgs(m hostprofile.WinMonitor, i int) []string {
 	return []string{
 		"-FullScreen=1", "-FullScreenMode=Current", "-RemoteResize=0",
-		// Канал локальный: без автоподбора и JPEG — Tight без потерь, полный цвет, слабый zlib
-		// (меньше работы процессору на обеих сторонах).
-		"-AutoSelect=0", "-PreferredEncoding=Tight", "-NoJPEG=1", "-FullColor=1", "-CompressLevel=1",
+		// Канал локальный (127.0.0.1): без автоподбора и без сжатия — Raw, полный цвет. Сжатие
+		// здесь только тратит процессор на обеих сторонах; с Tight картинка заметно дёрганее.
+		"-AutoSelect=0", "-PreferredEncoding=Raw", "-NoJPEG=1", "-FullColor=1",
 		// Меню просмотрщика — сочетание ShortcutModifiers (по умолчанию Ctrl+Alt) + M; клавиши F8
 		// в TigerVNC 1.16 больше нет. CConnection:100 — каждое отправленное нажатие (скан-код и символ),
 		// KeyboardWin32 — разбор клавиш Windows, DesktopWindow — захват клавиатуры (Win и т. п.).
