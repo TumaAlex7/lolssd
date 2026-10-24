@@ -123,6 +123,11 @@ func desktop() int {
 	if err != nil {
 		return fail("Образ загрузки %s: %v", p.VM.Path, err)
 	}
+	// MAC гостя постоянный (из machine-id): ICS выдаёт ему по DHCP один и тот же адрес.
+	vm.MAC = "52:54:00:" + p.MachineID[0:2] + ":" + p.MachineID[2:4] + ":" + p.MachineID[4:6]
+	if vm.Tap, err = vmNetwork(); err != nil {
+		log.Println("сеть ВМ через TAP недоступна, встроенная сеть QEMU (zapret в ней не работает):", err)
+	}
 	for _, d := range disks {
 		vm.Disks = append(vm.Disks, winctl.VMDisk{Path: fmt.Sprintf(`\\.\PhysicalDrive%d`, d.N), Model: d.Info.Model, Serial: d.Info.Serial})
 	}

@@ -82,6 +82,13 @@ func TestQEMUArgs(t *testing.T) {
 			}
 		}
 	}
+	if !strings.Contains(strings.Join(a, " "), "-nic user,model=virtio-net-pci") {
+		t.Error("без TAP — встроенная сеть")
+	}
+	v.Tap, v.MAC = "lolssd", "52:54:00:12:34:56"
+	if !strings.Contains(strings.Join(QEMUArgs(v), " "), "-netdev tap,id=net0,ifname=lolssd -device virtio-net-pci,netdev=net0,mac=52:54:00:12:34:56") {
+		t.Error("нет сети через TAP")
+	}
 	v.IrqchipOff = true
 	if !strings.Contains(strings.Join(QEMUArgs(v), " "), "-accel whpx,kernel-irqchip=off") {
 		t.Error("нет kernel-irqchip=off")

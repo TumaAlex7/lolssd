@@ -17,6 +17,7 @@ type VM struct {
 	Monitors                []hostprofile.WinMonitor // по одному выходу virtio-gpu на монитор, слева направо
 	AudioPCI                string                   // адрес звуковой карты хоста, см. hostprofile.Profile
 	Keyd                    string                   // конфиг keyd для ВМ (keymap.VMConfig), пусто — без keyd
+	Tap, MAC                string                   // адаптер TAP Windows и MAC гостя; без Tap — встроенная сеть QEMU
 	SerialLog               string
 	QMPPort                 int
 	IrqchipOff              bool // запасной режим WHPX: прерывания в QEMU, а не в гипервизоре
@@ -34,6 +35,8 @@ type VMDisk struct {
 //   - Экран — virtio-gpu, по выходу на монитор Windows, каждый отдаёт свой VNC-сервер QEMU
 //     (только изменившиеся области) на VNCPort(i); у каждого выхода свой планшет для мыши.
 //   - Звуковая карта — на том же PCI-адресе, что у хоста (hdaArgs).
+//   - Сеть — через адаптер TAP Windows (пакеты гостя как есть, это нужно zapret), без него —
+//     встроенная сеть QEMU.
 func QEMUArgs(v VM) []string {
 	accel := "whpx"
 	if v.IrqchipOff {
@@ -68,7 +71,13 @@ func QEMUArgs(v VM) []string {
 	a = append(a, keydArgs(v.Keyd)...)
 	a = append(a, "-audiodev", "dsound,id=snd0")
 	a = append(a, hdaArgs(v.AudioPCI)...)
-	a = append(a, "-nic", "user,model=virtio-net-pci",
+	if v.Tap != "" {
+		a = append(a, "-netdev", "tap,id=net0,ifname="+optEscape(v.Tap),
+			"-device", "virtio-net-pci,netdev=net0,mac="+v.MAC)
+	} else {
+		a = append(a, "-nic", "user,model=virtio-net-pci")
+	}
+	a = append(a,
 		"-display", "none", "-serial", "file:"+v.SerialLog,
 		"-qmp", fmt.Sprintf("tcp:127.0.0.1:%d,server=on,wait=off", v.QMPPort))
 	return a
