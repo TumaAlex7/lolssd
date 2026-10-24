@@ -26,6 +26,15 @@ Windows Registry Editor Version 5.00
 [HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\partmgr\Parameters]
 "SanPolicy"=dword:00000004
 
+; Boot from whatever controller the disk ends up on: Windows is installed in a VM (AHCI) and on
+; the real machine the system disk may sit on NVMe or another SATA controller, whose drivers
+; would not load at boot (INACCESSIBLE_BOOT_DEVICE). USB storage is covered by the portable mode.
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\stornvme]
+"Start"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\storahci]
+"Start"=dword:00000000
+
 ; No hibernation and no fast startup: both leave NTFS dirty on a disk that may next
 ; boot on another machine.
 [HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Power]
@@ -149,8 +158,9 @@ Windows Registry Editor Version 5.00
 
 ; ---------------------------------------------------------------- keyboard
 
-; No Scancode Map by default: Win stays Win. Full-screen TigerVNC passes it to Linux as Super
-; (docs/ARCHITECTURE.md §7). lolssd-win mount writes the profile's 1:1 keyd remaps here.
+; No Scancode Map by default: Win stays Win, full-screen TigerVNC passes it to the VM. With a host
+; profile, lolssd-win logon writes the F23 -> F24 transport for the Copilot key here
+; (docs/ARCHITECTURE.md, section 7).
 
 ; ---------------------------------------------------------------- last on purpose
 
