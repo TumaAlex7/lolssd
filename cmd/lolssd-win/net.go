@@ -21,7 +21,8 @@ const tapName = "lolssd"
 // интернету (ICS) с подключения, через которое сейчас идёт маршрут по умолчанию; ICS же раздаёт
 // гостю адрес по DHCP.
 //
-// Нет адаптера — ставит драйвер TAP-Windows (из \Program Files\lolssd\tap) и создаёт его.
+// Нет адаптера — ставит драйвер TAP-Windows (из \Program Files\lolssd\tap, build/tap.sh) и
+// создаёт его devcon.
 // Возвращает имя адаптера для QEMU.
 func vmNetwork() (string, error) {
 	dir := filepath.Join(os.Getenv("ProgramFiles"), "lolssd", "tap")
@@ -34,8 +35,8 @@ $tap = '` + dir + `'
 function Find-Tap { Get-NetAdapter | Where-Object { $_.InterfaceDescription -like 'TAP-Windows Adapter V9*' } | Select-Object -First 1 }
 $a = Find-Tap
 if (-not $a) {
-  & "$tap\tapinstall.exe" install "$tap\OemVista.inf" tap0901 | Out-Host
-  if ($LASTEXITCODE -ne 0) { throw "tapinstall: $LASTEXITCODE" }
+  & "$tap\devcon.exe" install "$tap\OemVista.inf" 'root\tap0901' | Out-Host
+  if ($LASTEXITCODE -ne 0) { throw "devcon install: $LASTEXITCODE" }
   for ($i = 0; $i -lt 20 -and -not $a; $i++) { Start-Sleep -Milliseconds 500; $a = Find-Tap }
   if (-not $a) { throw 'адаптер TAP не появился' }
   "installed"

@@ -9,7 +9,7 @@ GOFLAGS := -trimpath -ldflags=-s\ -w
 export CGO_ENABLED := 0
 
 WIN := dist/windows/C
-.PHONY: dist wsl kmod qemu iso test clean
+.PHONY: dist wsl kmod qemu tap iso test clean
 
 dist:
 	mkdir -p dist/LOLSSD/host dist/LOLSSD/profiles "$(WIN)/Program Files/lolssd" "$(WIN)/Windows/Setup/Scripts" dist/wsl
@@ -37,6 +37,10 @@ kmod:
 # QEMU для Windows (ВМ с системой хоста, lolssd-win desktop): dist/qemu, build/qemu.sh.
 qemu:
 	build/qemu.sh
+
+# Драйвер TAP-Windows для сети ВМ: dist/tap, build/tap.sh.
+tap:
+	build/tap.sh
 
 # Установочный ISO со всем внутри: make iso ISO=~/Downloads/Win11.iso [DRIVERS=~/lolssd-drivers] [EDITION="Windows 11 Pro"]
 EDITION ?= Windows 11 Home

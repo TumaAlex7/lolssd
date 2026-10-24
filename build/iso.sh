@@ -10,7 +10,8 @@
 #   - наши файлы лежат прямо в образе Windows, установщик ничего не докачивает и не копирует:
 #       \Windows\Setup\Scripts\   SetupComplete.cmd, lolssd-setup.ps1, lolssd.reg
 #       \Program Files\lolssd\    lolssd-win.exe, lolssd-drivers.ps1, vncviewer.exe (TigerVNC),
-#                                 qemu\ (QEMU для ВМ с системой хоста, make qemu)
+#                                 qemu\ (QEMU для ВМ с системой хоста, make qemu),
+#                                 tap\ (драйвер TAP-Windows для её сети, make tap)
 #       \ProgramData\lolssd\wsl\  пусковой WSL-дистрибутив и MSI WSL (если собраны make wsl)
 #       \Drivers\                 INF-драйверы (если указаны)
 #   - autounattend.xml в корне ISO (установщик ищет его там);
@@ -71,6 +72,11 @@ fi
 	echo "add '$dist/windows/lolssd.reg' '/Windows/Setup/Scripts/lolssd.reg'"
 	echo "add '$dist/windows/C/Program Files/lolssd' '/Program Files/lolssd'"
 	[[ -s $viewer ]] && echo "add '$viewer' '/Program Files/lolssd/vncviewer.exe'"
+	if [[ -f $dist/tap/OemVista.inf ]]; then
+		echo "add '$dist/tap' '/Program Files/lolssd/tap'"
+	else
+		echo "  (нет dist/tap — ВМ без сети через TAP, zapret в ней не заработает; make tap)" >&2
+	fi
 	if [[ -f $dist/qemu/qemu-system-x86_64w.exe ]]; then
 		echo "add '$dist/qemu' '/Program Files/lolssd/qemu'"
 	else
