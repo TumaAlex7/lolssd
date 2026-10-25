@@ -1,0 +1,14 @@
+[Unit]
+Description=lolssd: shrink the root partition (lolssd.shrink=)
+DefaultDependencies=no
+ConditionKernelCommandLine=lolssd.shrink
+After=systemd-udev-trigger.service systemd-udevd.service
+Before=systemd-fsck-root.service sysroot.mount initrd-root-fs.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/lolshrink
+StandardOutput=journal+console
+StandardError=journal+console
+TimeoutSec=infinity
