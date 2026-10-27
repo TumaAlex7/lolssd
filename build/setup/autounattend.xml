@@ -1,10 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  lolssd answer file, lives in the root of the ISO built by build/iso.sh.
-  Setup still asks for the language and the disk (pick the only unallocated space).
+  lolssd answer file template. build/install.sh fills it in for each install and hands it to setup
+  on a second CD: the Windows partition it created (InstallTo), the user from the build options
+  (or none: setup asks), Riot at the first logon or not. Setup itself asks for the language, the
+  edition and the key.
   - windowsPE: bypass the TPM/Secure Boot/RAM checks in case the VM lacks them;
-  - specialize: apply lolssd.reg (shipped inside the image) before OOBE, so encryption,
-    updates and the rest are off from the very start;
+  - specialize: apply lolssd.reg (shipped inside the image) before OOBE, so encryption and the
+    rest are off from the very start;
   - oobeSystem: local administrator "lol", empty password, autologon, no Microsoft account.
   Everything else runs from SetupComplete.cmd, which Windows starts itself before the first logon;
   at the first logon lolssd-riot.ps1 preinstalls Riot Client and the game.

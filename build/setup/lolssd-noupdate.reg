@@ -1,0 +1,38 @@
+Windows Registry Editor Version 5.00
+
+; lolssd: Windows Update off (build option "updates" unchecked). Applied after lolssd.reg, the
+; same way (offline into the image hives, then reg import in specialize).
+
+; An update needing several reboots would end up half-applied, and an unattended
+; reboot on someone else's machine is the worst case.
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate]
+"DoNotConnectToWindowsUpdateInternetLocations"=dword:00000001
+"ExcludeWUDriversInQualityUpdate"=dword:00000001
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU]
+"NoAutoUpdate"=dword:00000001
+"NoAutoRebootWithLoggedOnUsers"=dword:00000001
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\WindowsStore]
+"AutoDownload"=dword:00000002
+
+; Start=4: disabled. WaaSMedicSvc (re-enables the other two) is at the very end of the file.
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\wuauserv]
+"Start"=dword:00000004
+
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\UsoSvc]
+"Start"=dword:00000004
+
+; Drivers only from \drivers on the disk (lolssd drivers on Linux), not from Windows Update.
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\DriverSearching]
+"DontSearchWindowsUpdate"=dword:00000001
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\DriverSearching]
+"SearchOrderConfig"=dword:00000000
+
+; ---------------------------------------------------------------- last on purpose
+
+; ACL-protected on a running system: "reg import" stops at the first error, so this key
+; goes last and everything above is already applied. Offline it is written like any other.
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\WaaSMedicSvc]
+"Start"=dword:00000004

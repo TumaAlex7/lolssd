@@ -190,15 +190,14 @@ func hidden(timeout time.Duration, name string, args ...string) *exec.Cmd {
 // shortcuts раскладывает ярлыки lolssd при установке Windows (lolssd-setup.ps1):
 //   - «Linux» (рабочий стол хоста в ВМ, lolssd-win desktop) и «Linux terminal» (консоль,
 //     lolssd-win terminal) — в корне «Пуска» и на общем рабочем столе, со своими значками;
-//     на сервере (VARIANT=server) их нет;
-//   - «Restart into Windows (SSD)» — во встроенной папке «Служебные — Windows» (System Tools),
+//     только с опцией vm;
+//   - «Restart into Windows» — во встроенной папке «Служебные — Windows» (System Tools),
 //     с системным значком.
 func shortcuts() int {
 	prog := filepath.Join(os.Getenv("ProgramFiles"), "lolssd")
-	variant := strings.TrimSpace(readFirstLine(filepath.Join(os.Getenv("SystemRoot"), "Setup", "Scripts", "lolssd-variant.txt")))
 	script := `$prog = '` + prog + `'
 $exe = "$prog\lolssd-win.exe"
-$server = '` + variant + `' -eq 'server'
+$vm = '` + option("vm") + `' -eq '1'
 $s = New-Object -ComObject WScript.Shell
 $menu = "$env:ProgramData\Microsoft\Windows\Start Menu\Programs"
 function Link($path, $arguments, $desc, $icon) {
@@ -207,8 +206,9 @@ function Link($path, $arguments, $desc, $icon) {
   $l.Save()
 }
 New-Item -ItemType Directory -Force "$menu\System Tools" | Out-Null
-Link "$menu\System Tools\Restart into Windows (SSD).lnk" 'restart' 'Restart straight back into this Windows instead of the host system' "$env:SystemRoot\System32\shell32.dll,238"
-if (-not $server) {
+Remove-Item "$menu\System Tools\Restart into Windows (SSD).lnk" -ErrorAction SilentlyContinue
+Link "$menu\System Tools\Restart into Windows.lnk" 'restart' 'Restart straight back into this Windows instead of the host system' "$env:SystemRoot\System32\shell32.dll,238"
+if ($vm) {
   foreach ($d in $menu, "$env:PUBLIC\Desktop") {
     Link "$d\Linux.lnk" 'desktop' "The host's Linux in a VM, full screen on every monitor" "$prog\linux.ico,0"
     Link "$d\Linux terminal.lnk" 'terminal' "The host's Linux in a VM, console only" "$prog\terminal.ico,0"
@@ -224,10 +224,17 @@ if (-not $server) {
 	return 0
 }
 
-func readFirstLine(path string) string {
-	b, _ := os.ReadFile(path)
-	line, _, _ := strings.Cut(string(b), "\n")
-	return line
+// option возвращает значение из файла опций сборки (build/options.default):
+// C:\Windows\Setup\Scripts\lolssd-options.txt, строки key=value.
+func option(name string) string {
+	b, _ := os.ReadFile(filepath.Join(os.Getenv("SystemRoot"), "Setup", "Scripts", "lolssd-options.txt"))
+	val := ""
+	for _, line := range strings.Split(string(b), "\n") {
+		if k, v, ok := strings.Cut(strings.TrimSpace(line), "="); ok && k == name {
+			val = v
+		}
+	}
+	return val
 }
 
 // lolssdVolume находит том раздела LOLSSD по метке ФС и возвращает его корень, например `D:\`.

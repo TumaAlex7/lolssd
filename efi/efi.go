@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"unicode/utf16"
 )
 
@@ -151,6 +152,48 @@ func decodeUCS2(b []byte) string {
 		u = append(u, c)
 	}
 	return string(utf16.Decode(u))
+}
+
+// LoadOptionFile возвращает путь файла (узел File() первого пути) записи EFI_LOAD_OPTION,
+// например \EFI\Microsoft\Boot\bootmgfw.efi; пусто, если его нет.
+func LoadOptionFile(b []byte) string {
+	if len(b) < 6 {
+		return ""
+	}
+	pathLen := int(binary.LittleEndian.Uint16(b[4:6]))
+	desc := decodeUCS2(b[6:])
+	i := 6 + 2*len(utf16.Encode([]rune(desc))) + 2
+	if i+pathLen > len(b) {
+		return ""
+	}
+	path := b[i : i+pathLen]
+	for len(path) >= 4 {
+		typ, sub, l := path[0], path[1], int(binary.LittleEndian.Uint16(path[2:4]))
+		if l < 4 || l > len(path) || typ == 0x7f && sub == 0xff {
+			break
+		}
+		if typ == 4 && sub == 4 {
+			return decodeUCS2(path[4:l])
+		}
+		path = path[l:]
+	}
+	return ""
+}
+
+// StripFile — как Strip, но только записи, ведущие на файл file этого раздела (без учёта
+// регистра): на ESP, общем с Linux, из порядка уходит Windows Boot Manager, а загрузчик Linux
+// остаётся.
+func StripFile(order []uint16, entries map[uint16][]byte, guid [16]byte, keep, file string) (newOrder, remove []uint16) {
+	for _, n := range order {
+		desc, g := ParseLoadOption(entries[n])
+		switch {
+		case g != guid || !strings.EqualFold(LoadOptionFile(entries[n]), file):
+			newOrder = append(newOrder, n)
+		case desc != keep:
+			remove = append(remove, n)
+		}
+	}
+	return newOrder, remove
 }
 
 // Strip убирает из порядка загрузки записи, ведущие на раздел guid. Записи с описанием

@@ -32,12 +32,13 @@ function Run($exe) {
     if ($LASTEXITCODE -ne 0) { throw "$exe $args exited with $LASTEXITCODE" }
 }
 
-# ssd: Windows on the external SSD with the host's Linux in a VM; server: Windows on a server's
-# internal disk with Sunshine, installed unattended (build/iso.sh VARIANT=server).
-$variant = (Get-Content "$env:SystemRoot\Setup\Scripts\lolssd-variant.txt" -ErrorAction SilentlyContinue | Select-Object -First 1)
-if (-not $variant) { $variant = 'ssd' }
-$variant = $variant.Trim()
-Log "variant $variant"
+# Build options (build/options.default, written by the build wizard): key=value, 1 = yes.
+$options = @{}
+foreach ($line in Get-Content "$env:SystemRoot\Setup\Scripts\lolssd-options.txt" -ErrorAction SilentlyContinue) {
+    if ($line -match '^([a-z]+)=(.*)$') { $options[$Matches[1]] = $Matches[2].Trim() }
+}
+function Opt($name) { $options[$name] -eq '1' }
+Log "options: $(($options.GetEnumerator() | Where-Object Name -ne 'apps' | ForEach-Object { "$($_.Name)=$($_.Value)" }) -join ' ')"
 
 # The registry blocks creating hiberfil.sys; this also removes one setup may have left.
 Step 'hibernation off' {
@@ -46,14 +47,14 @@ Step 'hibernation off' {
 
 # Task definitions live in files plus the TaskCache registry, with ACLs on some;
 # the services are already disabled offline, this is the second layer.
-Step 'disable update scheduled tasks' {
+if (-not (Opt updates)) { Step 'disable update scheduled tasks' {
     $denied = @()
     $tasks = Get-ScheduledTask -TaskPath '\Microsoft\Windows\WindowsUpdate\', '\Microsoft\Windows\UpdateOrchestrator\' -ErrorAction SilentlyContinue
     foreach ($t in $tasks) {
         try { $t | Disable-ScheduledTask | Out-Null } catch { $denied += $t.TaskName }
     }
     if ($denied) { Log "      tasks left enabled (access denied): $($denied -join ', ')" }
-}
+} }
 
 # In case encryption started before PreventDeviceEncryption took effect.
 Step 'BitLocker off on system drive' {
@@ -65,10 +66,10 @@ Step 'BitLocker off on system drive' {
 
 # Linux inside Windows: QEMU runs the host's Linux on Windows' own hypervisor (WHPX). Enabling
 # it later would cost an extra reboot.
-Step 'Windows Hypervisor Platform' {
+if (Opt vm) { Step 'Windows Hypervisor Platform' {
     Enable-WindowsOptionalFeature -Online -All -NoRestart -FeatureName HypervisorPlatform | Out-Null
     Run bcdedit.exe /set '{current}' hypervisorlaunchtype auto
-}
+} }
 
 # ShippedWithReserves in lolssd.reg works only if set before setup created the reserve.
 Step 'reserved storage off' {
@@ -105,10 +106,10 @@ Step 'register driver install task' {
     Register-ScheduledTask -TaskPath '\lolssd\' -TaskName 'drivers' -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null
 }
 
-# Shortcuts (lolssd-win shortcuts): "Restart into Windows (SSD)" in
-# System Tools -- a plain restart boots the host's own system, because nvram-guard keeps this
-# SSD out of BootOrder; and, on the SSD variant, "Linux" (the host's desktop in a VM) and
-# "Linux terminal" in the Start menu root and on the desktop.
+# Shortcuts (lolssd-win shortcuts): "Restart into Windows" in System Tools -- a plain restart
+# boots the host's own system, because nvram-guard keeps Windows out of BootOrder; and, with the
+# vm option, "Linux" (the host's desktop in a VM) and "Linux terminal" in the Start menu root and
+# on the desktop.
 Step 'shortcuts' {
     $p = Start-Process "$env:ProgramFiles\lolssd\lolssd-win.exe" -ArgumentList 'shortcuts' -Wait -PassThru
     if ($p.ExitCode -ne 0) { throw "lolssd-win shortcuts exited with $($p.ExitCode)" }
@@ -116,26 +117,26 @@ Step 'shortcuts' {
 
 # ---------------------------------------------------------------- tiny
 # Runs before the first logon, so removing the provisioned packages is enough: no user has
-# them installed yet. Kept: runtimes the rest depends on, Terminal (Linux shells open in it),
-# Windows Security (memory integrity status), winget, Store, Notepad.
-$keepApps = '^(Microsoft\.(VCLibs|UI\.Xaml|NET\.|WindowsAppRuntime|DesktopAppInstaller|WindowsTerminal|SecHealthUI|WindowsStore|StorePurchaseApp|WindowsNotepad))'
-Step 'remove provisioned apps' {
+# them installed yet. The apps option lists them by package name (tiny11's list by default);
+# runtimes, Store, winget, Terminal and Windows Security are never on it.
+$removeApps = @($options['apps'] -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+if ($removeApps) { Step 'remove provisioned apps' {
     $removed = @()
     foreach ($p in Get-AppxProvisionedPackage -Online) {
-        if ($p.DisplayName -match $keepApps) { continue }
+        if ($removeApps -notcontains $p.DisplayName) { continue }
         try {
             Remove-AppxProvisionedPackage -Online -PackageName $p.PackageName -AllUsers -ErrorAction Stop | Out-Null
             $removed += $p.DisplayName
         } catch { Log "      could not remove $($p.DisplayName): $_" }
     }
     Log "      removed: $($removed -join ', ')"
-}
+} }
 
 # tiny11's set of Windows packages (IE, WordPad, Media Player, handwriting, OCR, speech...).
 # The same DISM servicing tiny11builder uses, on the full Windows of the install VM: WinPE's
 # DISM cannot service packages of a newer image (and has no AppX provider at all).
 $removePackages = 'Microsoft-Windows-(InternetExplorer-Optional-Package|Kernel-LA57-FoD-Package|LanguageFeatures-(Handwriting|OCR|Speech|TextToSpeech)|MediaPlayer-Package|TabletPCMath-Package|Wallpaper-Content-Extended-FoD-Package|WordPad-FoD-Package|StepsRecorder-Package)'
-Step 'remove Windows packages' {
+if (Opt packages) { Step 'remove Windows packages' {
     $removed = @()
     # Only base packages (Name~Key~Arch~~Version): language parts (~en-US~) go away with them.
     foreach ($p in Get-WindowsPackage -Online | Where-Object { $_.PackageName -match $removePackages -and $_.PackageState -eq 'Installed' -and ($_.PackageName -split '~')[3] -eq '' }) {
@@ -145,10 +146,10 @@ Step 'remove Windows packages' {
         } catch { Log "      could not remove $($p.PackageName): $_" }
     }
     Log "      removed: $($removed -join ', ')"
-}
+} }
 
 # OneDrive installs itself per user from the default profile's Run key.
-Step 'no OneDrive for new users' {
+if (Opt onedrive) { Step 'no OneDrive for new users' {
     Run reg.exe load 'HKU\lolssdDefault' "$env:SystemDrive\Users\Default\NTUSER.DAT"
     try {
         Remove-ItemProperty 'Registry::HKU\lolssdDefault\Software\Microsoft\Windows\CurrentVersion\Run' -Name OneDriveSetup -ErrorAction SilentlyContinue
@@ -156,10 +157,10 @@ Step 'no OneDrive for new users' {
         [gc]::Collect()
         Run reg.exe unload 'HKU\lolssdDefault'
     }
-}
+} }
 
 # Outside the EEA the Edge uninstaller refuses unless EdgeUpdateDev allows it. WebView2 stays.
-Step 'remove Edge' {
+if (Opt edge) { Step 'remove Edge' {
     $setup = Get-ChildItem "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\*\Installer\setup.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($setup) {
         Set-Reg 'HKLM:\SOFTWARE\Microsoft\EdgeUpdateDev' 'AllowUninstall' 1
@@ -167,7 +168,7 @@ Step 'remove Edge' {
         if (Test-Path "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe") { throw 'Edge is still installed (uninstall refused)' }
     }
     Remove-Item "$env:PUBLIC\Desktop\Microsoft Edge.lnk" -ErrorAction SilentlyContinue
-}
+} }
 
 # The real machine has no NVRAM entry from this install (setup wrote it to the VM's NVRAM);
 # lolssd boot and firmware boot menus use the removable-media path \EFI\BOOT\BOOTX64.EFI.
@@ -181,8 +182,8 @@ Step 'fallback boot path on the ESP' {
     } finally { mountvol.exe S: /D | Out-Null }
 }
 
-# ---------------------------------------------------------------- server
-if ($variant -eq 'server') {
+# ---------------------------------------------------------------- Sunshine
+if (Opt sunshine) {
     # Sunshine (game streaming host for Moonlight): installs its service and firewall rules.
     # The web UI asks for a user name and password on the first visit, https://<server>:47990.
     Step 'Sunshine' {
@@ -203,17 +204,11 @@ if ($variant -eq 'server') {
         }
     }
 
-    # A server: never sleep, never turn the monitor off (Sunshine needs an active display).
+    # A streaming host: never sleep, never turn the monitor off (Sunshine needs an active display).
     Step 'never sleep' {
         foreach ($k in 'standby-timeout-ac', 'standby-timeout-dc', 'monitor-timeout-ac', 'monitor-timeout-dc') {
             Run powercfg.exe /change $k 0
         }
-    }
-
-    # The install runs unattended in a VM; power it off when done, the first logon (and the
-    # Riot installer) happens on the server itself.
-    Step 'power off after setup' {
-        Run shutdown.exe /s /t 60 /c 'lolssd: setup finished'
     }
 }
 

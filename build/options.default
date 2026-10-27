@@ -1,0 +1,28 @@
+# lolssd: что ставить в Windows — файл опций сборки. Его пишет мастер (build/lolssd-setup), этот —
+# значения по умолчанию для make iso. 1 — да, 0 — нет. Тот же файл лежит в образе
+# (C:\Windows\Setup\Scripts\lolssd-options.txt): по нему настраивается Windows.
+
+# Где будет Windows: external — внешний диск (переезжает между компьютерами), internal —
+# внутренний диск компьютера (рядом с Linux или целиком).
+placement=external
+# Linux этого компьютера внутри Windows, в ВМ (QEMU, сеть через TAP, TigerVNC).
+vm=1
+# Windows Update, в том числе драйверы через него.
+updates=1
+# Удалить Edge (браузер, его или любой другой, ставится из Microsoft Store). WebView2 остаётся.
+edge=1
+# Удалить OneDrive.
+onedrive=1
+# Удалить встроенные приложения — список через запятую (имена пакетов, как в tiny11).
+apps=Clipchamp.Clipchamp,Microsoft.BingNews,Microsoft.BingSearch,Microsoft.BingWeather,Microsoft.Copilot,Microsoft.Windows.CrossDevice,Microsoft.GamingApp,Microsoft.GetHelp,Microsoft.Getstarted,Microsoft.MicrosoftOfficeHub,Microsoft.MicrosoftSolitaireCollection,Microsoft.MicrosoftStickyNotes,Microsoft.OutlookForWindows,Microsoft.Paint,Microsoft.People,Microsoft.PowerAutomateDesktop,Microsoft.StartExperiencesApp,Microsoft.Todos,Microsoft.Windows.DevHome,Microsoft.WindowsAlarms,Microsoft.WindowsCamera,Microsoft.WindowsFeedbackHub,Microsoft.WindowsMaps,Microsoft.WindowsSoundRecorder,Microsoft.Xbox.TCUI,Microsoft.XboxGameOverlay,Microsoft.XboxGamingOverlay,Microsoft.XboxIdentityProvider,Microsoft.XboxSpeechToTextOverlay,Microsoft.YourPhone,Microsoft.ZuneMusic,Microsoft.ZuneVideo,MicrosoftCorporationII.MicrosoftFamily,MicrosoftCorporationII.QuickAssist,MSTeams
+# Удалить компоненты Windows: Internet Explorer, WordPad, Windows Media Player, рукописный ввод,
+# распознавание текста и речи, запись действий.
+packages=1
+# Удалить специальные возможности: экранный диктор, лупа, экранная клавиатура, субтитры, голосовой доступ.
+accessibility=1
+# Поставить Riot Client и League of Legends при первом входе (ещё в ВМ установки).
+riot=1
+# Sunshine — сервер стриминга для Moonlight.
+sunshine=0
+# Локальный пользователь без пароля и автовход; пусто — учётку создаёт установщик Windows.
+user=lol

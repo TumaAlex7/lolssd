@@ -49,7 +49,11 @@ func nvramGuard() int {
 		}
 	}
 
+	// На внутреннем диске ESP может быть общим с Linux: убирается только Windows Boot Manager.
 	newOrder, remove := efi.Strip(order, entries, esp.GUID, "lolssd")
+	if option("placement") == "internal" {
+		newOrder, remove = efi.StripFile(order, entries, esp.GUID, "lolssd", `\EFI\Microsoft\Boot\bootmgfw.efi`)
+	}
 	if len(newOrder) == len(order) {
 		log.Println("в BootOrder нет записей на этот SSD, ничего не меняю")
 		return 0

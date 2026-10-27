@@ -1,0 +1,31 @@
+Windows Registry Editor Version 5.00
+
+; lolssd: Windows on an external disk (placement "external"): it moves between machines and its
+; USB port must never be put to sleep.
+
+; Windows To Go behaviour: tolerates moving between machines.
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control]
+"PortableOperatingSystem"=dword:00000001
+
+; ---------------------------------------------------------------- USB system disk
+
+; Power policies by setting GUID: suspending the USB port or spinning the disk down
+; can drop the system disk from under the running system.
+; USB selective suspend
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Power\PowerSettings\48e6b7a6-50f5-4782-a5d4-53bb8f07e226]
+"ACSettingIndex"=dword:00000000
+"DCSettingIndex"=dword:00000000
+
+; Turn off hard disk after: never
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Power\PowerSettings\6738e2c4-e8a5-4a42-b16a-e040e769756e]
+"ACSettingIndex"=dword:00000000
+"DCSettingIndex"=dword:00000000
+
+; Services a game-only Windows on an external disk does not need. SysMain (prefetching) and
+; WSearch (indexing) hammer the disk, which is the bottleneck over USB.
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\SysMain]
+"Start"=dword:00000004
+
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\WSearch]
+"Start"=dword:00000004
+

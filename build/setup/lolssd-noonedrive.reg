@@ -1,0 +1,6 @@
+Windows Registry Editor Version 5.00
+
+; lolssd: OneDrive removed (build option): it also moves the Desktop into the cloud.
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\OneDrive]
+"DisableFileSyncNGSC"=dword:00000001
+

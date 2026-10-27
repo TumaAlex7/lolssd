@@ -22,7 +22,9 @@ const (
 	efivars   = "/sys/firmware/efi/efivars/"
 	globalVar = "-" + efi.GlobalGUID
 	bootLabel = "lolssd"
-	bootFile  = `\EFI\BOOT\BOOTX64.EFI`
+	// Загрузчик Windows, а не запасной путь \EFI\BOOT\BOOTX64.EFI: на ESP, общем с Linux, там
+	// загрузчик Linux. Его кладёт установщик Windows на любой ESP.
+	bootFile  = `\EFI\Microsoft\Boot\bootmgfw.efi`
 	partLabel = "LOLSSD"
 )
 
@@ -133,6 +135,10 @@ func entryFor(esp efi.Part) (uint16, error) {
 	}
 	for num, opt := range entries {
 		if desc, guid := efi.ParseLoadOption(opt); desc == bootLabel && guid == esp.GUID {
+			// Записи прежних версий вели на \EFI\BOOT\BOOTX64.EFI.
+			if !strings.EqualFold(efi.LoadOptionFile(opt), bootFile) {
+				return num, writeVar(fmt.Sprintf("Boot%04X", num), efi.BuildLoadOption(bootLabel, bootFile, esp))
+			}
 			return num, nil
 		}
 	}

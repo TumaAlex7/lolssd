@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # lolssd: почистить образ Windows офлайн, из Linux: wimlib (файлы образа) и hivex (реестр
 # образа). Вызывается из build/iso.sh:
-#   build/debloat.sh install.wim <номер образа> lolssd.reg
+#   EDGE=1 ONEDRIVE=1 ACCESSIBILITY=1 build/debloat.sh install.wim <номер образа> lolssd.reg
 #
 #   - lolssd.reg применяется к кустам SYSTEM и SOFTWARE (CurrentControlSet → ControlSet001);
-#   - Edge (без WebView2) и OneDrive: файлы, ярлык, службы обновления, автозапуск у новых
-#     пользователей;
-#   - специальные возможности (экранный диктор, лупа, экранная клавиатура, субтитры, голосовой
-#     доступ): программы и их папка в «Пуске».
+#   - EDGE=1: Edge (без WebView2) — файлы, ярлык, службы обновления;
+#   - ONEDRIVE=1: OneDrive — установщик и автозапуск у новых пользователей;
+#   - ACCESSIBILITY=1: специальные возможности (экранный диктор, лупа, экранная клавиатура,
+#     субтитры, голосовой доступ) — программы и их папка в «Пуске».
 # Приложения магазина здесь не трогаются: их удаляет lolssd-setup.ps1 через DISM
 # (Remove-AppxProvisionedPackage) в виртуальной машине при установке, до первого входа. Вручную
 # из Linux не обновить внутреннюю базу пакетов Windows (StateRepository), а DISM делает это сам.
@@ -53,30 +53,41 @@ awk -v sys="$w/system.reg" -v sw="$w/software.reg" '
 
 # Edge: службы обновления и сам браузер; WebView2 (Microsoft\EdgeWebView) остаётся.
 
-for p in 'Program Files (x86)/Microsoft/Edge' 'Program Files (x86)/Microsoft/EdgeUpdate' 'Program Files (x86)/Microsoft/EdgeCore' \
-	'ProgramData/Microsoft/Windows/Start Menu/Programs/Microsoft Edge.lnk' 'Windows/System32/OneDriveSetup.exe'; do
+edge=() onedrive=() access=()
+if [[ ${EDGE:-1} == 1 ]]; then
+	edge=('Program Files (x86)/Microsoft/Edge' 'Program Files (x86)/Microsoft/EdgeUpdate' 'Program Files (x86)/Microsoft/EdgeCore'
+		'ProgramData/Microsoft/Windows/Start Menu/Programs/Microsoft Edge.lnk')
+fi
+[[ ${ONEDRIVE:-1} != 1 ]] || onedrive=('Windows/System32/OneDriveSetup.exe')
+for p in "${edge[@]}" "${onedrive[@]}"; do
 	echo "delete --force --recursive '/$p'" >>"$cmds"
 done
 
 # Специальные возможности: экранный диктор, лупа, экранная клавиатура, живые субтитры, голосовой
 # доступ — сами программы и их папка в «Пуске» (ярлыки — в профиле по умолчанию). Сенсорная
 # клавиатура (TabTip) и utilman остаются. Обновлений нет, так что удалённое не вернётся.
-for p in Narrator.exe NarratorControlTemplates.xml NarratorControlTemplates.xsd NarratorMCAT Magnify.exe \
-	osk.exe LiveCaptions.exe VoiceAccess.exe; do
-	echo "delete --force --recursive '/Windows/System32/$p'" >>"$cmds"
-done
-for p in 'Windows/SysWOW64/Magnify.exe' 'ProgramData/Microsoft/Windows/Start Menu/Programs/Accessibility' \
-	'Users/Default/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Accessibility'; do
-	echo "delete --force --recursive '/$p'" >>"$cmds"
-done
+if [[ ${ACCESSIBILITY:-1} == 1 ]]; then
+	for p in Narrator.exe NarratorControlTemplates.xml NarratorControlTemplates.xsd NarratorMCAT Magnify.exe \
+		osk.exe LiveCaptions.exe VoiceAccess.exe; do
+		echo "delete --force --recursive '/Windows/System32/$p'" >>"$cmds"
+	done
+	for p in 'Windows/SysWOW64/Magnify.exe' 'ProgramData/Microsoft/Windows/Start Menu/Programs/Accessibility' \
+		'Users/Default/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Accessibility'; do
+		echo "delete --force --recursive '/$p'" >>"$cmds"
+	done
+fi
 
 # Профиль по умолчанию: OneDrive ставится каждому новому пользователю из Run; Win+Ctrl+Enter
 # (экранный диктор) — выключено, программы больше нет.
-printf 'Windows Registry Editor Version 5.00\n\n[HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run]\n"OneDriveSetup"=-\n\n[HKEY_CURRENT_USER\\Software\\Microsoft\\Narrator\\NoRoam]\n"WinEnterLaunchEnabled"=dword:00000000\n' >"$w/default.reg"
+{
+	printf 'Windows Registry Editor Version 5.00\n\n'
+	[[ ${ONEDRIVE:-1} != 1 ]] || printf '[HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run]\n"OneDriveSetup"=-\n\n'
+	[[ ${ACCESSIBILITY:-1} != 1 ]] || printf '[HKEY_CURRENT_USER\\Software\\Microsoft\\Narrator\\NoRoam]\n"WinEnterLaunchEnabled"=dword:00000000\n'
+} >"$w/default.reg"
 
 hivexregedit --merge --prefix "$hklm\\SYSTEM" "$w/h/$sys" "$w/system.reg"
 # hivexregedit не умеет удалять ключи ([-…]), а hivexsh умеет. Нет ключа — нечего удалять.
-for svc in edgeupdate edgeupdatem MicrosoftEdgeElevationService; do
+for svc in ${edge:+edgeupdate edgeupdatem MicrosoftEdgeElevationService}; do
 	printf 'cd \\ControlSet001\\Services\\%s\ndel\ncommit\n' "$svc" | hivexsh -w "$w/h/$sys" >/dev/null 2>&1 || true
 done
 hivexregedit --merge --prefix "$hklm\\SOFTWARE" "$w/h/$sw" "$w/software.reg"

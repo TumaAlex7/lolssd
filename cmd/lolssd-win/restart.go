@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"strings"
 
 	"golang.org/x/sys/windows"
 
@@ -17,10 +18,12 @@ import (
 
 const (
 	bootLabel = "lolssd" // та же запись, что создаёт `lolssd boot` на Linux
-	bootFile  = `\EFI\BOOT\BOOTX64.EFI`
+	// Загрузчик Windows, а не запасной путь \EFI\BOOT\BOOTX64.EFI: на ESP, общем с Linux, там
+	// загрузчик Linux.
+	bootFile = `\EFI\Microsoft\Boot\bootmgfw.efi`
 )
 
-// restartSelf — ярлык «Restart into Windows (SSD)»: ставит BootNext на ESP этого SSD и
+// restartSelf — ярлык «Restart into Windows»: ставит BootNext на ESP этого диска и
 // перезагружает машину. Обычная перезагрузка уводит в систему хоста: nvram-guard убирает SSD
 // из BootOrder (docs/ARCHITECTURE.md §2). BootNext действует один раз, порядок не меняется.
 // Переменные UEFI пишет только администратор: запущенная без прав (из ярлыка), программа
@@ -76,6 +79,10 @@ func entryFor(esp efi.Part) (uint16, error) {
 			continue
 		}
 		if desc, guid := efi.ParseLoadOption(opt); desc == bootLabel && guid == esp.GUID {
+			// Записи прежних версий вели на \EFI\BOOT\BOOTX64.EFI.
+			if !strings.EqualFold(efi.LoadOptionFile(opt), bootFile) {
+				return uint16(n), setVar(fmt.Sprintf("Boot%04X", n), efi.BuildLoadOption(bootLabel, bootFile, esp))
+			}
 			return uint16(n), nil
 		}
 	}

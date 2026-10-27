@@ -79,3 +79,22 @@ func TestGUIDString(t *testing.T) {
 		t.Fatal(s)
 	}
 }
+
+func TestStripFile(t *testing.T) {
+	// ESP, общий с Linux: уходит только Windows Boot Manager, загрузчики Linux на том же
+	// разделе (свой и запасной путь BOOTX64.EFI, где лежит systemd-boot) остаются.
+	esp := Part{Num: 1, First: 2048, Last: 4095, GUID: [16]byte{1}}
+	entries := map[uint16][]byte{
+		0: BuildLoadOption("Linux Boot Manager", `\EFI\systemd\systemd-bootx64.efi`, esp),
+		1: BuildLoadOption("Windows Boot Manager", `\EFI\MICROSOFT\BOOT\BOOTMGFW.EFI`, esp),
+		2: BuildLoadOption("UEFI OS", `\EFI\BOOT\BOOTX64.EFI`, esp),
+		3: BuildLoadOption("lolssd", `\EFI\Microsoft\Boot\bootmgfw.efi`, esp),
+	}
+	if f := LoadOptionFile(entries[0]); f != `\EFI\systemd\systemd-bootx64.efi` {
+		t.Fatalf("LoadOptionFile: %q", f)
+	}
+	order, remove := StripFile([]uint16{1, 0, 2, 3}, entries, esp.GUID, "lolssd", `\EFI\Microsoft\Boot\bootmgfw.efi`)
+	if len(order) != 2 || order[0] != 0 || order[1] != 2 || len(remove) != 1 || remove[0] != 1 {
+		t.Fatal(order, remove)
+	}
+}

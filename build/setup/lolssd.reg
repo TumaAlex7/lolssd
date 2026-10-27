@@ -17,10 +17,6 @@ Windows Registry Editor Version 5.00
 [HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\BitLocker]
 "PreventDeviceEncryption"=dword:00000001
 
-; Windows To Go behaviour: tolerates moving between machines.
-[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control]
-"PortableOperatingSystem"=dword:00000001
-
 ; SAN policy OfflineInternal (same as diskpart "san policy=OfflineInternal"):
 ; host disks stay offline, Windows never mounts or writes to them.
 [HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\partmgr\Parameters]
@@ -44,28 +40,6 @@ Windows Registry Editor Version 5.00
 [HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager\Power]
 "HiberbootEnabled"=dword:00000000
 
-; ---------------------------------------------------------------- frozen Windows
-
-; An update needing several reboots would end up half-applied, and an unattended
-; reboot on someone else's machine is the worst case.
-[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate]
-"DoNotConnectToWindowsUpdateInternetLocations"=dword:00000001
-"ExcludeWUDriversInQualityUpdate"=dword:00000001
-
-[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU]
-"NoAutoUpdate"=dword:00000001
-"NoAutoRebootWithLoggedOnUsers"=dword:00000001
-
-[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\WindowsStore]
-"AutoDownload"=dword:00000002
-
-; Start=4: disabled. WaaSMedicSvc (re-enables the other two) is at the very end of the file.
-[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\wuauserv]
-"Start"=dword:00000004
-
-[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\UsoSvc]
-"Start"=dword:00000004
-
 ; ---------------------------------------------------------------- Vanguard
 
 ; VBS + HVCI (VAN 9005). VBS itself needs Secure Boot on the host.
@@ -87,20 +61,6 @@ Windows Registry Editor Version 5.00
 "DisableSR"=dword:00000001
 "DisableConfig"=dword:00000001
 
-; ---------------------------------------------------------------- USB system disk
-
-; Power policies by setting GUID: suspending the USB port or spinning the disk down
-; can drop the system disk from under the running system.
-; USB selective suspend
-[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Power\PowerSettings\48e6b7a6-50f5-4782-a5d4-53bb8f07e226]
-"ACSettingIndex"=dword:00000000
-"DCSettingIndex"=dword:00000000
-
-; Turn off hard disk after: never
-[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Power\PowerSettings\6738e2c4-e8a5-4a42-b16a-e040e769756e]
-"ACSettingIndex"=dword:00000000
-"DCSettingIndex"=dword:00000000
-
 ; ---------------------------------------------------------------- nothing extra
 
 ; No consumer features: sponsored and "suggested" apps and pins (Steam, games), cloud content.
@@ -115,10 +75,7 @@ Windows Registry Editor Version 5.00
 "DisableSettingSync"=dword:00000002
 "DisableSettingSyncUserOverride"=dword:00000001
 
-; No OneDrive (it also moves the Desktop into the cloud), Copilot or widgets.
-[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\OneDrive]
-"DisableFileSyncNGSC"=dword:00000001
-
+; No Copilot or widgets.
 [HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\WindowsCopilot]
 "TurnOffWindowsCopilot"=dword:00000001
 
@@ -128,25 +85,7 @@ Windows Registry Editor Version 5.00
 [HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\DataCollection]
 "AllowTelemetry"=dword:00000000
 
-; No drivers or manufacturer apps from the network: drivers come from \Drivers on the disk.
-; This is how a "heavy Razer driver" (vendor software) arrived on the first try.
-[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\DriverSearching]
-"DontSearchWindowsUpdate"=dword:00000001
-
-[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\DriverSearching]
-"SearchOrderConfig"=dword:00000000
-
-[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\Device Metadata]
-"PreventDeviceMetadataFromNetwork"=dword:00000001
-
-; Services a game-only Windows on an external disk does not need. SysMain (prefetching) and
-; WSearch (indexing) hammer the disk, which is the bottleneck over USB.
-[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\SysMain]
-"Start"=dword:00000004
-
-[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\WSearch]
-"Start"=dword:00000004
-
+; Telemetry and push services.
 [HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\DiagTrack]
 "Start"=dword:00000004
 
@@ -161,10 +100,3 @@ Windows Registry Editor Version 5.00
 ; No Scancode Map by default: Win stays Win, full-screen TigerVNC passes it to the VM. With a host
 ; profile, lolssd-win logon writes the F23 -> F24 transport for the Copilot key here
 ; (docs/ARCHITECTURE.md, section 7).
-
-; ---------------------------------------------------------------- last on purpose
-
-; ACL-protected on a running system: "reg import" stops at the first error, so this key
-; goes last and everything above is already applied. Offline it is written like any other.
-[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\WaaSMedicSvc]
-"Start"=dword:00000004

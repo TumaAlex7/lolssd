@@ -1,7 +1,7 @@
 # Сборка lolssd. Раскладка dist/ повторяет то, куда файлы ложатся на SSD:
 #   dist/LOLSSD/          содержимое раздела LOLSSD (exFAT): утилита для Linux, профили, драйверы
 #   dist/windows/C/       файлы, которые кладутся в раздел Windows
-#   dist/windows/lolssd.reg  применяется к кустам реестра образа офлайн
+#   dist/windows/lolssd*.reg  настройки реестра; build/iso.sh склеивает нужные по опциям
 #   dist/qemu/, dist/tap/ QEMU и драйвер TAP для ВМ с системой хоста (make qemu, make tap)
 
 GO      ?= go
@@ -18,7 +18,7 @@ dist:
 	GOOS=windows GOARCH=amd64 $(GO) build -trimpath -ldflags="-s -w -H windowsgui" -o "$(WIN)/Program Files/lolssd/lolssd-win.exe" ./cmd/lolssd-win
 	# Файлы для Windows — с CRLF: cmd и reg import на LF спотыкаются.
 	for f in SetupComplete.cmd lolssd-setup.ps1; do sed 's/\r*$$/\r/' build/setup/$$f > "$(WIN)/Windows/Setup/Scripts/$$f"; done
-	sed 's/\r*$$/\r/' build/setup/lolssd.reg > dist/windows/lolssd.reg
+	for f in build/setup/lolssd*.reg; do sed 's/\r*$$/\r/' $$f > dist/windows/$$(basename $$f); done
 	for f in lolssd-drivers.ps1 lolssd-riot.ps1; do sed 's/\r*$$/\r/' build/setup/$$f > "$(WIN)/Program Files/lolssd/$$f"; done
 	cp README.md dist/LOLSSD/README.md
 
@@ -30,12 +30,12 @@ qemu:
 tap:
 	build/tap.sh
 
-# Установочный ISO со всем внутри: make iso ISO=~/Downloads/Win11.iso [DRIVERS=~/lolssd-drivers] [EDITION="Windows 11 Pro"]
-# [VARIANT=server] (Windows с Sunshine на диск сервера, см. build/install.sh) [RIOT=0] (без Riot).
-EDITION ?= Windows 11 Home
-iso: dist $(if $(filter server,$(VARIANT)),,qemu tap)
+# Установочный ISO со всем внутри: make iso ISO=~/Downloads/Win11.iso [OPTIONS=файл опций]
+# (по умолчанию build/options.default; обычно ISO собирает мастер build/lolssd-setup).
+OPTIONS ?= build/options.default
+iso: dist $(if $(filter vm=1,$(shell grep -x 'vm=1' $(OPTIONS))),qemu tap)
 	@test -n "$(ISO)" || { echo "укажите ISO=путь/к/Windows.iso"; exit 1; }
-	build/iso.sh "$(ISO)" "$(DRIVERS)" "$(EDITION)"
+	build/iso.sh "$(ISO)" "$(OPTIONS)"
 
 test:
 	$(GO) vet ./...
