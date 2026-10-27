@@ -182,8 +182,10 @@ else:  # учётку создаёт установщик Windows
     sub(r"\s*<UserAccounts>.*?</UserAccounts>", "")
     sub(r"\s*<AutoLogon>.*?</AutoLogon>", "")
     sub(r"\s*<HideOnlineAccountScreens>true</HideOnlineAccountScreens>", "")
-if riot != "1":
+if riot != "1" or key:
     sub(r"\s*<FirstLogonCommands>.*?</FirstLogonCommands>", "")
+if key:  # проверки: после первого входа Windows выключается сама, и QEMU завершается
+    sub(r"(      </OOBE>\n)", r'\1      <FirstLogonCommands>\n        <SynchronousCommand wcm:action="add">\n          <Order>1</Order>\n          <CommandLine>shutdown.exe /s /t 60</CommandLine>\n        </SynchronousCommand>\n      </FirstLogonCommands>\n')
 open(dst, "w", encoding="utf-8").write(s)
 PY
 xorriso -as mkisofs -quiet -J -V ANSWER -o "$work/answer.iso" "$work/answer"
