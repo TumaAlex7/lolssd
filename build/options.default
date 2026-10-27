@@ -7,8 +7,10 @@
 placement=external
 # Linux этого компьютера внутри Windows, в ВМ (QEMU, сеть через TAP, TigerVNC).
 vm=1
-# Windows Update, в том числе драйверы через него.
-updates=1
+# Windows Update, в том числе драйверы через него. Выключен — Windows без обновлений (и без
+# обновлений безопасности), зато не ставит с драйверами программы производителя (службы ASUS и
+# т. п.); драйверы — из папки Drivers на рабочем столе: ссылки AMD, NVIDIA, Intel и свои.
+updates=0
 # Удалить Edge (браузер, его или любой другой, ставится из Microsoft Store). WebView2 остаётся.
 edge=1
 # Удалить OneDrive.

@@ -1,7 +1,8 @@
 # lolssd: drivers from \drivers folders on the volumes (LOLSSD; lolssd drivers on Linux and the
 # build wizard put them there). Runs as SYSTEM at every startup (scheduled task \lolssd\drivers):
-#   - installers (.exe, .msi) are copied to the Drivers folder on the desktop: the user runs
-#     them, their switches are not uniform enough to run them unattended;
+#   - installers (.exe, .msi) and links (.url: official auto-detect pages of AMD, NVIDIA and
+#     Intel) are copied to the Drivers folder on the desktop: the user runs them, installer
+#     switches are not uniform enough to run them unattended;
 #   - INF packages are installed via pnputil, but only when needed:
 #       - first boot on a machine this disk has not seen yet (by SMBIOS UUID), or
 #       - some device has no driver (code 28), or the display runs on the Microsoft Basic driver, or
@@ -27,7 +28,7 @@ $roots = @(Get-Volume | Where-Object DriveLetter | ForEach-Object { "$($_.DriveL
 
 $desk = "$env:PUBLIC\Desktop\Drivers"
 foreach ($root in $roots) {
-    foreach ($f in Get-ChildItem $root -Recurse -File -Include *.exe, *.msi -ErrorAction SilentlyContinue) {
+    foreach ($f in Get-ChildItem $root -Recurse -File -Include *.exe, *.msi, *.url -ErrorAction SilentlyContinue) {
         $to = Join-Path $desk $f.Name
         if ((Test-Path $to) -and (Get-Item $to).Length -eq $f.Length) { continue }
         New-Item -ItemType Directory -Force $desk | Out-Null
