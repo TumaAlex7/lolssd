@@ -65,6 +65,7 @@ func main() {
 	if !checkDeps() {
 		os.Exit(1)
 	}
+	defer removeDeps()
 	iso := pickISO()
 	if iso == "" {
 		return
@@ -214,49 +215,119 @@ func unpack() (string, error) {
 	return dir, err
 }
 
-// checkDeps: для установки нужны QEMU, прошивка OVMF с Secure Boot и swtpm (виртуальный TPM).
-// Мастер их не ставит, а говорит одну команду для этого дистрибутива.
-func checkDeps() bool {
+// Пакеты для установки: QEMU (с окном GTK и ПЗУ сетевой карты), прошивка OVMF с Secure Boot и
+// swtpm (виртуальный TPM). Как сборочные зависимости у yay: мастер ставит недостающее сам и после
+// установки удаляет ровно то, что поставил (разница списков пакетов до и после).
+type pkgManager struct {
+	pkgs    []string
+	list    []string // все установленные пакеты, по имени в строке
+	install []string
+	remove  []string
+}
+
+var managers = map[string]pkgManager{
+	"pacman": {[]string{"qemu-system-x86", "qemu-system-x86-firmware", "qemu-ui-gtk", "edk2-ovmf", "swtpm"},
+		[]string{"pacman", "-Qq"}, []string{"pacman", "-S", "--needed", "--asdeps", "--noconfirm"}, []string{"pacman", "-Rn", "--noconfirm"}},
+	"apt-get": {[]string{"qemu-system-x86", "qemu-system-gui", "ovmf", "swtpm-tools"},
+		[]string{"dpkg-query", "-W", "-f", "${Package}\\n"}, []string{"apt-get", "install", "-y", "--no-install-recommends"}, []string{"apt-get", "purge", "-y"}},
+	"dnf": {[]string{"qemu-system-x86-core", "qemu-ui-gtk", "edk2-ovmf", "swtpm-tools"},
+		[]string{"rpm", "-qa", "--qf", "%{NAME}\\n"}, []string{"dnf", "install", "-y"}, []string{"dnf", "remove", "-y"}},
+	"zypper": {[]string{"qemu-x86", "qemu-ui-gtk", "qemu-ovmf-x86_64", "swtpm"},
+		[]string{"rpm", "-qa", "--qf", "%{NAME}\\n"}, []string{"zypper", "--non-interactive", "install"}, []string{"zypper", "--non-interactive", "remove"}},
+}
+
+var (
+	pm        pkgManager
+	tempPkgs  []string // поставлены мастером, удаляются в конце
+	ovmfFiles = []string{"/usr/share/edk2/x64/OVMF_CODE.secboot.4m.fd", "/usr/share/OVMF/OVMF_CODE_4M.secboot.fd",
+		"/usr/share/edk2/ovmf/OVMF_CODE.secboot.fd", "/usr/share/OVMF/OVMF_CODE.secboot.fd"}
+)
+
+func missingDeps() []string {
 	var missing []string
-	for _, t := range []string{"qemu-system-x86_64", "swtpm", "sfdisk"} {
+	for _, t := range []string{"qemu-system-x86_64", "swtpm"} {
 		if _, err := exec.LookPath(t); err != nil {
 			missing = append(missing, t)
 		}
 	}
-	ovmf := false
-	for _, f := range []string{"/usr/share/edk2/x64/OVMF_CODE.secboot.4m.fd", "/usr/share/OVMF/OVMF_CODE_4M.secboot.fd",
-		"/usr/share/edk2/ovmf/OVMF_CODE.secboot.fd", "/usr/share/OVMF/OVMF_CODE.secboot.fd"} {
+	for _, f := range ovmfFiles {
 		if _, err := os.Stat(f); err == nil {
-			ovmf = true
+			return missing
 		}
 	}
-	if !ovmf {
-		missing = append(missing, "OVMF")
+	return append(missing, "OVMF")
+}
+
+func installed() map[string]bool {
+	out, _ := exec.Command(pm.list[0], pm.list[1:]...).Output()
+	m := map[string]bool{}
+	for _, l := range strings.Fields(string(out)) {
+		m[l] = true
 	}
+	return m
+}
+
+func checkDeps() bool {
+	missing := missingDeps()
 	if len(missing) == 0 {
 		return true
 	}
-	fmt.Println("Для установки Windows в виртуальной машине не хватает:", strings.Join(missing, ", "))
-	osr, _ := os.ReadFile("/etc/os-release")
-	id := string(osr)
-	switch {
-	case strings.Contains(id, "arch"):
-		fmt.Println("  sudo pacman -S --needed qemu-desktop edk2-ovmf swtpm")
-	case strings.Contains(id, "debian") || strings.Contains(id, "ubuntu"):
-		fmt.Println("  sudo apt install qemu-system-x86 ovmf swtpm-tools")
-	case strings.Contains(id, "fedora") || strings.Contains(id, "rhel"):
-		fmt.Println("  sudo dnf install qemu-kvm edk2-ovmf swtpm-tools")
-	case strings.Contains(id, "suse"):
-		fmt.Println("  sudo zypper install qemu-x86 qemu-ovmf-x86_64 swtpm")
-	default:
-		fmt.Println("  пакеты QEMU (x86_64), OVMF (edk2) и swtpm вашего дистрибутива")
+	for _, name := range []string{"pacman", "apt-get", "dnf", "zypper"} {
+		if _, err := exec.LookPath(name); err == nil {
+			pm = managers[name]
+			break
+		}
 	}
-	fmt.Println("После установки запустите мастер снова.")
-	return false
+	fmt.Println("Для установки Windows в виртуальной машине не хватает:", strings.Join(missing, ", "))
+	if pm.pkgs == nil {
+		fmt.Println("Поставьте пакеты QEMU (x86_64), OVMF (edk2) и swtpm и запустите мастер снова.")
+		return false
+	}
+	fmt.Println("Мастер может поставить их на время установки и удалить после, как yay сборочные")
+	fmt.Println("зависимости: " + strings.Join(pm.pkgs, " ") + " (что уже стоит, не тронет).")
+	if a := strings.ToLower(tui.Input("Поставить", "да")); a != "да" && a != "д" && a != "y" && a != "yes" {
+		return false
+	}
+	before := installed()
+	cmd := exec.Command("sudo", append(pm.install, pm.pkgs...)...)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	err := cmd.Run()
+	for p := range installed() {
+		if !before[p] {
+			tempPkgs = append(tempPkgs, p)
+		}
+	}
+	if err != nil {
+		fmt.Println("не получилось поставить:", err)
+		removeDeps()
+		return false
+	}
+	if m := missingDeps(); len(m) > 0 {
+		fmt.Println("после установки пакетов всё ещё нет:", strings.Join(m, ", "))
+		removeDeps()
+		return false
+	}
+	return true
+}
+
+// removeDeps удаляет пакеты, которые поставил мастер, — и только их.
+func removeDeps() {
+	if len(tempPkgs) == 0 {
+		return
+	}
+	sort.Strings(tempPkgs)
+	fmt.Printf("== удаляю поставленное для установки (%d пакетов): %s\n", len(tempPkgs), strings.Join(tempPkgs, " "))
+	cmd := exec.Command("sudo", append(pm.remove, tempPkgs...)...)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	if err := cmd.Run(); err != nil {
+		fmt.Println("не получилось удалить, удалите вручную:", strings.Join(tempPkgs, " "))
+	}
+	tempPkgs = nil
 }
 
 func fail(err error) {
 	fmt.Fprintln(os.Stderr, "ошибка:", err)
+	removeDeps()
 	os.Exit(1)
 }
 
