@@ -31,10 +31,10 @@
           <DiskID>0</DiskID>
           <WillWipeDisk>false</WillWipeDisk>
           <ModifyPartitions>
+            <ModifyPartition wcm:action="add"><Order>1</Order><PartitionID>@WIN@</PartitionID><Format>NTFS</Format><Label>Windows</Label></ModifyPartition>
 <!--ESP-BEGIN-->
-            <ModifyPartition wcm:action="add"><Order>1</Order><PartitionID>@ESP@</PartitionID><Format>FAT32</Format><Label>EFI</Label></ModifyPartition>
+            <ModifyPartition wcm:action="add"><Order>2</Order><PartitionID>@ESP@</PartitionID><Format>FAT32</Format><Label>EFI</Label></ModifyPartition>
 <!--ESP-END-->
-            <ModifyPartition wcm:action="add"><Order>2</Order><PartitionID>@WIN@</PartitionID><Format>NTFS</Format><Label>Windows</Label></ModifyPartition>
           </ModifyPartitions>
         </Disk>
       </DiskConfiguration>

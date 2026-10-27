@@ -3,7 +3,8 @@
 # мастер (lolssd-setup): он распаковывает свои файлы (payload) и пишет в них options.txt.
 #   sudo install.sh --whole /dev/sdX Windows.iso PAYLOAD [папка драйверов]   весь диск (стирается)
 #   sudo install.sh --free  /dev/sdX Windows.iso PAYLOAD [папка драйверов]   самый большой свободный участок
-#   install.sh --whole образ.img Windows.iso PAYLOAD РАЗМЕР                   в файл-образ, без root (проверки)
+#   install.sh --whole образ.img Windows.iso PAYLOAD РАЗМЕР                   в новый файл-образ, без root (проверки)
+#   install.sh --free  образ.img Windows.iso PAYLOAD                          в свободное место файла-образа (проверки)
 # Нужно не меньше 120 ГБ: диски «на 128» бывают чуть меньше 128·10⁹ байт. Из пакетов — только
 # QEMU, OVMF, swtpm и util-linux.
 #
@@ -51,9 +52,13 @@ done
 # Файл-образ (проверки): размечается и отдаётся QEMU как есть, root не нужен.
 image=
 if [[ ! -b $dev ]]; then
-	[[ $mode == whole && ! -e $dev && $extra =~ ^[0-9]+G$ ]] || die "образ: --whole новый.img ISO PAYLOAD РАЗМЕР (например 130G)"
+	if [[ $mode == whole ]]; then
+		[[ ! -e $dev && $extra =~ ^[0-9]+G$ ]] || die "образ: --whole новый.img ISO PAYLOAD РАЗМЕР (например 130G)"
+		truncate -s "$extra" "$dev"
+	else
+		[[ -f $dev ]] || die "образ: --free существующий.img ISO PAYLOAD"
+	fi
 	image=$dev
-	truncate -s "$extra" "$image"
 	extra=
 	user=$(id -un)
 else
@@ -90,7 +95,7 @@ if [[ $mode == whole ]]; then
 else
 	sfdisk -d "$dev" >/dev/null 2>&1 || die "на $dev нет таблицы разделов: для пустого диска — весь диск"
 	[[ $(sfdisk -d "$dev" | sed -n 's/^label: //p') == gpt ]] || die "на $dev разметка не GPT"
-	ss=$(blockdev --getss "$dev")
+	ss=$( [[ -n $image ]] && echo 512 || blockdev --getss "$dev")
 	read -r start end < <(sfdisk -F -q "$dev" | awk 'NR>1 && $3>max {max=$3; s=$1; e=$2} END {print s, e}')
 	[[ -n ${start:-} ]] || die "на $dev нет свободного места"
 	esp_num=$(sfdisk -d "$dev" | grep -i "type=$esp_type" | num | head -1 || true)
@@ -114,7 +119,7 @@ else
 		echo "start=$at, size=$(( (end + 1 - at) / al * al )), type=$basic, name=Windows"
 	)
 	echo "$table" | sfdisk -q --append --no-reread "$dev"
-	partx -u "$dev" 2>/dev/null || partx -a "$dev" 2>/dev/null || true
+	[[ -n $image ]] || partx -u "$dev" 2>/dev/null || partx -a "$dev" 2>/dev/null || true
 	# Номера новых разделов — по их началу: sfdisk может занять свободную запись в середине таблицы.
 	num_at() { sfdisk -d "$dev" | grep -E "start= *$1," | num || true; }
 	at_of() { echo "$table" | sed -n "s/^start=\([0-9]*\),.*name=$1\$/\1/p"; }
