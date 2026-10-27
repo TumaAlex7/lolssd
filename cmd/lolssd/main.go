@@ -6,11 +6,16 @@ package main
 import (
 	"fmt"
 	"os"
+
+	"lolssd/tui"
 )
 
 func main() {
 	if len(os.Args) < 2 {
-		usage()
+		if !tui.IsTerminal() {
+			usage()
+		}
+		os.Exit(menu())
 	}
 	switch os.Args[1] {
 	case "check":
@@ -19,12 +24,14 @@ func main() {
 		os.Exit(boot(os.Args[2:]))
 	case "profile":
 		os.Exit(runProfile())
+	case "drivers":
+		os.Exit(addDrivers(os.Args[2:]))
 	default:
 		usage()
 	}
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "использование: lolssd check | profile | boot [--no-reboot] | boot --cleanup")
+	fmt.Fprintln(os.Stderr, "использование: lolssd (меню) | check | profile | drivers ПУТЬ... | boot [--no-reboot] | boot --cleanup")
 	os.Exit(2)
 }

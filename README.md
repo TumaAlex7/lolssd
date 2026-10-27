@@ -51,14 +51,25 @@ Vanguard (античит Riot) работает на уровне ядра Windo
 
 ## Использование
 
-Раздел `LOLSSD` монтируется как обычная флешка. Утилита запускается через скрипт (udisks
-монтирует FAT без права запуска):
+Раздел `LOLSSD` (exFAT) монтируется сам при подключении SSD, утилита запускается прямо с него.
+Без аргументов — меню: сверху итог проверки компьютера, ниже действия.
 
 ```
-sh /run/media/$USER/LOLSSD/lolssd.sh check         # подходит ли компьютер, ничего не меняет
-sudo sh /run/media/$USER/LOLSSD/lolssd.sh boot     # один раз загрузиться в Windows на SSD
-sh /run/media/$USER/LOLSSD/lolssd.sh profile       # один раз: подготовить Linux внутри Windows
+/run/media/$USER/LOLSSD/lolssd
 ```
+
+На новой системе меню первым пунктом предлагает подготовить Linux для работы внутри Windows.
+Те же действия есть командами, для скриптов:
+
+```
+/run/media/$USER/LOLSSD/lolssd check            # подходит ли компьютер, ничего не меняет
+sudo /run/media/$USER/LOLSSD/lolssd boot        # один раз загрузиться в Windows на SSD
+/run/media/$USER/LOLSSD/lolssd profile          # подготовить Linux внутри Windows (и после обновления ядра)
+/run/media/$USER/LOLSSD/lolssd drivers ПУТЬ...  # драйверы для Windows: папки с .inf, установщики .exe/.msi
+```
+
+Драйверы ложатся в `LOLSSD/drivers`. Пакеты INF Windows ставит сама при следующей загрузке,
+установщики `.exe` и `.msi` выкладывает в папку `Drivers` на рабочем столе — их запускаешь сам.
 
 `boot` ставит одноразовый `BootNext` и перезагружает (`--no-reboot` — без перезагрузки,
 `--cleanup` — удалить свою запись из NVRAM). Без утилиты — меню загрузки прошивки (F8/F12/Esc).

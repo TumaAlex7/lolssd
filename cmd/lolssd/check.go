@@ -17,13 +17,20 @@ const secureBootVar = "/sys/firmware/efi/efivars/SecureBoot-8be4df61-93ca-11d2-a
 // Возвращает код выхода: 1, если есть хотя бы один FAIL.
 func check() int {
 	fails := 0
-	report := func(status, name, detail string) {
+	runChecks(func(status, name, detail string) {
 		if status == "FAIL" {
 			fails++
 		}
 		fmt.Printf("%-4s  %-18s %s\n", status, name, detail)
+	})
+	if fails > 0 {
+		return 1
 	}
+	return 0
+}
 
+// runChecks выполняет проверки и сообщает каждую в report (OK, WARN, FAIL, INFO).
+func runChecks(report func(status, name, detail string)) {
 	if _, err := os.Stat("/sys/firmware/efi"); err == nil {
 		report("OK", "UEFI", "система загружена в режиме UEFI")
 	} else {
@@ -98,11 +105,6 @@ func check() int {
 	}
 
 	usbSpeed(report)
-
-	if fails > 0 {
-		return 1
-	}
-	return 0
 }
 
 // usbSpeed находит USB-устройство, на котором лежит сам бинарник (раздел LOLSSD),
@@ -153,13 +155,9 @@ func usbSpeed(report func(status, name, detail string)) {
 }
 
 // exeBlockDev возвращает каталог sysfs блочного устройства (обычно раздела), на котором лежит бинарник.
-// LOLSSD_ROOT подменяет место бинарника: lolssd.sh запускает копию из /tmp, потому что udisks
-// монтирует FAT с showexec и запустить файл прямо с раздела нельзя.
+// LOLSSD — exFAT: udisks монтирует его без showexec и noexec, бинарник запускается прямо с раздела.
 func exeBlockDev() (string, error) {
 	exe, err := os.Executable()
-	if root := os.Getenv("LOLSSD_ROOT"); root != "" {
-		exe, err = root, nil
-	}
 	if err == nil {
 		exe, err = filepath.EvalSymlinks(exe)
 	}

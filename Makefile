@@ -1,5 +1,5 @@
 # Сборка lolssd. Раскладка dist/ повторяет то, куда файлы ложатся на SSD:
-#   dist/LOLSSD/          содержимое раздела LOLSSD (утилита для Linux, профили)
+#   dist/LOLSSD/          содержимое раздела LOLSSD (exFAT): утилита для Linux, профили, драйверы
 #   dist/windows/C/       файлы, которые кладутся в раздел Windows
 #   dist/windows/lolssd.reg  применяется к кустам реестра образа офлайн
 #   dist/qemu/, dist/tap/ QEMU и драйвер TAP для ВМ с системой хоста (make qemu, make tap)
@@ -12,8 +12,8 @@ WIN := dist/windows/C
 .PHONY: dist qemu tap iso test clean
 
 dist:
-	mkdir -p dist/LOLSSD/host dist/LOLSSD/profiles "$(WIN)/Program Files/lolssd" "$(WIN)/Windows/Setup/Scripts"
-	GOOS=linux GOARCH=amd64 $(GO) build $(GOFLAGS) -o dist/LOLSSD/host/lolssd ./cmd/lolssd
+	mkdir -p dist/LOLSSD/profiles dist/LOLSSD/drivers "$(WIN)/Program Files/lolssd" "$(WIN)/Windows/Setup/Scripts"
+	GOOS=linux GOARCH=amd64 $(GO) build $(GOFLAGS) -o dist/LOLSSD/lolssd ./cmd/lolssd
 	# windowsgui: задания планировщика не открывают окно консоли; журнал пишется в файл.
 	GOOS=windows GOARCH=amd64 $(GO) build -trimpath -ldflags="-s -w -H windowsgui" -o "$(WIN)/Program Files/lolssd/lolssd-win.exe" ./cmd/lolssd-win
 	# Файлы для Windows — с CRLF: cmd и reg import на LF спотыкаются.
@@ -21,7 +21,6 @@ dist:
 	sed 's/\r*$$/\r/' build/setup/lolssd.reg > dist/windows/lolssd.reg
 	for f in lolssd-drivers.ps1 lolssd-riot.ps1; do sed 's/\r*$$/\r/' build/setup/$$f > "$(WIN)/Program Files/lolssd/$$f"; done
 	cp README.md dist/LOLSSD/README.md
-	cp build/lolssd.sh dist/LOLSSD/lolssd.sh
 
 # QEMU для Windows (ВМ с системой хоста, lolssd-win desktop): dist/qemu, build/qemu.sh.
 qemu:

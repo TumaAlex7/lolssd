@@ -50,8 +50,8 @@ for t in 7z; do command -v "$t" >/dev/null || die "нет $t (sudo pacman -S p7z
 # Серверный ISO (VARIANT=server): в файле ответов задан раздел для Windows.
 auto=
 7z e -so "$iso" autounattend.xml 2>/dev/null | grep -q '<ImageInstall>' && auto=1
-for t in qemu-system-x86_64 sfdisk mkfs.fat swtpm; do
-	command -v "$t" >/dev/null || die "нет $t (sudo pacman -S qemu-desktop edk2-ovmf dosfstools swtpm)"
+for t in qemu-system-x86_64 sfdisk mkfs.fat mkfs.exfat swtpm; do
+	command -v "$t" >/dev/null || die "нет $t (sudo pacman -S qemu-desktop edk2-ovmf dosfstools exfatprogs swtpm)"
 done
 # Прошивка с поддержкой Secure Boot и виртуальный TPM 2.0: установщик Windows 11 проверяет оба.
 code=/usr/share/edk2/x64/OVMF_CODE.secboot.4m.fd vars=/usr/share/edk2/x64/OVMF_VARS.4m.fd
@@ -102,7 +102,7 @@ udevadm settle
 # Разделы: sda1 или nvme0n1p1.
 part() { [[ $dev == *[0-9] ]] && echo "${dev}p$1" || echo "$dev$1"; }
 mkfs.fat -F 32 -n EFI "$(part 1)" >/dev/null
-mkfs.fat -F 32 -n LOLSSD "$(part 2)" >/dev/null
+mkfs.exfat -q -L LOLSSD "$(part 2)" >/dev/null
 if [[ -n $auto ]]; then
 	mkfs.ntfs --quick --label Windows "$(part 4)" >/dev/null
 	[[ -z $data_start_mib ]] || mkfs.ntfs --quick --label DATA "$(part 5)" >/dev/null
@@ -161,4 +161,4 @@ if [[ -n $image ]]; then
 fi
 echo "QEMU закрыт ($(date +%H:%M)). Если Windows выключилась сама (или после первого входа) — готово."
 echo "Загрузиться в неё один раз (следующая загрузка снова в Linux):"
-echo "  sudo mount $(part 2) /mnt && sudo sh /mnt/lolssd.sh boot"
+echo "  sudo /run/media/\$USER/LOLSSD/lolssd boot   (раздел LOLSSD монтируется сам при подключении)"
