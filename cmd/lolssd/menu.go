@@ -54,7 +54,7 @@ func menu() int {
 			run   func()
 		}
 		actions := []action{
-			{"Загрузиться в Windows", func() { sudo("boot") }},
+			{"Запуск", func() { sudo("boot") }},
 			{profileItem, func() { runProfile(); tui.Pause() }},
 			{"Добавить драйверы для Windows", func() { addDrivers(nil); tui.Pause() }},
 			{"Проверка компьютера", func() { check(); tui.Pause() }},
