@@ -1,3 +1,5 @@
 /lolssd
 /lolssd-win.exe
 /dist/
+/cmd/lolssd-setup/payload/*
+!/cmd/lolssd-setup/payload/.keep

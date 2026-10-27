@@ -1,7 +1,8 @@
 #!/bin/sh
-# lolssd: мастер сборки и установки Windows (cmd/lolssd-setup). Запуск из любого места:
-#   build/lolssd-setup
+# lolssd: мастер установки из исходников — собирает dist/lolssd-setup (нужен Go) и запускает его.
+# Готовый бинарник лежит в релизах на GitHub: его можно запускать и без Go.
 set -e
 cd "$(dirname "$0")/.."
-command -v go >/dev/null || { echo "нужен Go: sudo pacman -S go" >&2; exit 1; }
-exec go run ./cmd/lolssd-setup
+command -v go >/dev/null || { echo "нужен Go: sudo pacman -S go (или готовый lolssd-setup из релиза)" >&2; exit 1; }
+make -s setup
+exec dist/lolssd-setup

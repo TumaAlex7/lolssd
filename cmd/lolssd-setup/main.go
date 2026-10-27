@@ -1,13 +1,16 @@
 //go:build linux
 
-// lolssd-setup — мастер сборки и установки: ISO Windows, куда ставить, что ставить; затем
-// make dist, build/iso.sh с файлом опций и sudo build/install.sh. Запускается из репозитория:
-// build/lolssd-setup. Не спрашивает то, что спросит сам установщик Windows (язык, редакция, ключ).
+// lolssd-setup — мастер установки: стоковый ISO Windows, куда ставить, что ставить; затем
+// sudo install.sh из вшитого набора файлов (payload, make setup). Один бинарник: ни Go, ни
+// репозиторий не нужны, из пакетов — QEMU, OVMF и swtpm. Не спрашивает то, что спросит сам
+// установщик Windows (язык, редакция, ключ).
 package main
 
 import (
+	"embed"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,6 +20,9 @@ import (
 
 	"lolssd/tui"
 )
+
+//go:embed all:payload
+var payload embed.FS
 
 const minBytes = 120_000_000_000 // диски «на 128» бывают чуть меньше 128·10⁹ байт
 
@@ -52,13 +58,12 @@ func main() {
 		fmt.Fprintln(os.Stderr, "мастеру нужен терминал")
 		os.Exit(2)
 	}
-	repo, err := os.Getwd()
-	if err == nil {
-		_, err = os.Stat(filepath.Join(repo, "build", "iso.sh"))
-	}
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "запускайте из корня репозитория: build/lolssd-setup")
+	if _, err := payload.ReadFile("payload/install.sh"); err != nil {
+		fmt.Fprintln(os.Stderr, "в мастере нет набора файлов: собирайте его make setup")
 		os.Exit(2)
+	}
+	if !checkDeps() {
+		os.Exit(1)
 	}
 	iso := pickISO()
 	if iso == "" {
@@ -157,37 +162,97 @@ func main() {
 		warn = tui.Red + "ВСЁ на " + t.dev + " будет стёрто." + "\x1b[0m"
 	}
 	summary = append([]string{"Windows: " + filepath.Base(iso), "Куда: " + t.label, warn, ""}, summary...)
-	if tui.Menu("Проверьте и начните", summary, []string{"Начать: собрать ISO и установить", "Отмена"}) != 0 {
+	if tui.Menu("Проверьте и начните", summary, []string{"Начать установку", "Отмена"}) != 0 {
 		return
 	}
 
-	optsFile := filepath.Join(repo, "dist", "options.txt")
-	os.MkdirAll(filepath.Dir(optsFile), 0o755)
-	if err := os.WriteFile(optsFile, []byte(opts), 0o644); err != nil {
-		fail(err)
-	}
-	targets := []string{"dist"}
-	if vm.On {
-		targets = append(targets, "qemu", "tap")
-	}
-	fmt.Println("== сборка утилит (make " + strings.Join(targets, " ") + ")")
-	run("make", targets...)
-	fmt.Println("== сборка ISO (около 10 минут на первый раз)")
-	out, err := tee(filepath.Join(repo, "build", "iso.sh"), iso, optsFile)
+	dir, err := unpack()
 	if err != nil {
 		fail(err)
 	}
-	lines := strings.Split(strings.TrimSpace(out), "\n")
-	built := lines[len(lines)-1]
-	args := []string{filepath.Join(repo, "build", "install.sh"), "--free", t.dev, built}
-	if t.whole {
-		args[1] = "--whole"
+	if err := os.WriteFile(filepath.Join(dir, "options.txt"), []byte(opts), 0o644); err != nil {
+		fail(err)
 	}
+	mode := "--free"
+	if t.whole {
+		mode = "--whole"
+	}
+	args := []string{"bash", filepath.Join(dir, "install.sh"), mode, t.dev, iso, dir}
 	if drivers != "" {
 		args = append(args, drivers)
 	}
-	fmt.Println("== установка (sudo: разметка диска и QEMU)")
+	fmt.Println("== установка (sudo: разметка диска и доступ QEMU к нему)")
 	run("sudo", args...)
+	os.RemoveAll(dir)
+}
+
+// unpack раскладывает вшитый набор файлов во временный каталог.
+func unpack() (string, error) {
+	dir, err := os.MkdirTemp("", "lolssd-setup-")
+	if err != nil {
+		return "", err
+	}
+	sub, _ := fs.Sub(payload, "payload")
+	err = fs.WalkDir(sub, ".", func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		to := filepath.Join(dir, p)
+		if d.IsDir() {
+			return os.MkdirAll(to, 0o755)
+		}
+		b, err := fs.ReadFile(sub, p)
+		if err != nil {
+			return err
+		}
+		mode := os.FileMode(0o644)
+		if p == "install.sh" || p == "LOLSSD/lolssd" {
+			mode = 0o755
+		}
+		return os.WriteFile(to, b, mode)
+	})
+	return dir, err
+}
+
+// checkDeps: для установки нужны QEMU, прошивка OVMF с Secure Boot и swtpm (виртуальный TPM).
+// Мастер их не ставит, а говорит одну команду для этого дистрибутива.
+func checkDeps() bool {
+	var missing []string
+	for _, t := range []string{"qemu-system-x86_64", "swtpm", "sfdisk"} {
+		if _, err := exec.LookPath(t); err != nil {
+			missing = append(missing, t)
+		}
+	}
+	ovmf := false
+	for _, f := range []string{"/usr/share/edk2/x64/OVMF_CODE.secboot.4m.fd", "/usr/share/OVMF/OVMF_CODE_4M.secboot.fd",
+		"/usr/share/edk2/ovmf/OVMF_CODE.secboot.fd", "/usr/share/OVMF/OVMF_CODE.secboot.fd"} {
+		if _, err := os.Stat(f); err == nil {
+			ovmf = true
+		}
+	}
+	if !ovmf {
+		missing = append(missing, "OVMF")
+	}
+	if len(missing) == 0 {
+		return true
+	}
+	fmt.Println("Для установки Windows в виртуальной машине не хватает:", strings.Join(missing, ", "))
+	osr, _ := os.ReadFile("/etc/os-release")
+	id := string(osr)
+	switch {
+	case strings.Contains(id, "arch"):
+		fmt.Println("  sudo pacman -S --needed qemu-desktop edk2-ovmf swtpm")
+	case strings.Contains(id, "debian") || strings.Contains(id, "ubuntu"):
+		fmt.Println("  sudo apt install qemu-system-x86 ovmf swtpm-tools")
+	case strings.Contains(id, "fedora") || strings.Contains(id, "rhel"):
+		fmt.Println("  sudo dnf install qemu-kvm edk2-ovmf swtpm-tools")
+	case strings.Contains(id, "suse"):
+		fmt.Println("  sudo zypper install qemu-x86 qemu-ovmf-x86_64 swtpm")
+	default:
+		fmt.Println("  пакеты QEMU (x86_64), OVMF (edk2) и swtpm вашего дистрибутива")
+	}
+	fmt.Println("После установки запустите мастер снова.")
+	return false
 }
 
 func fail(err error) {
@@ -201,26 +266,6 @@ func run(name string, args ...string) {
 	if err := cmd.Run(); err != nil {
 		fail(fmt.Errorf("%s: %w", name, err))
 	}
-}
-
-// tee запускает команду, показывая её вывод, и возвращает его.
-func tee(name string, args ...string) (string, error) {
-	cmd := exec.Command(name, args...)
-	var buf strings.Builder
-	cmd.Stdout = ioMulti{os.Stdout, &buf}
-	cmd.Stderr = os.Stderr
-	err := cmd.Run()
-	return buf.String(), err
-}
-
-type ioMulti struct {
-	a *os.File
-	b *strings.Builder
-}
-
-func (m ioMulti) Write(p []byte) (int, error) {
-	m.b.Write(p)
-	return m.a.Write(p)
 }
 
 // pickISO: ISO Windows из ~/Downloads и ~ (кроме собранных lolssd) или путь вручную.

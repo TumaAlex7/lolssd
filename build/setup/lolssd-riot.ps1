@@ -17,7 +17,7 @@ if (Test-Path "$env:SystemDrive\Riot Games\League of Legends\LeagueClient.exe") 
 
 $exe = "$dir\install-league-of-legends.$Region.exe"
 Log "downloading the installer ($Region)"
-& curl.exe -fsSL -o $exe "https://lol.secure.dyn.riotcdn.net/channels/public/x/installer/current/live.$Region.exe"
+& curl.exe -fsSL --ssl-no-revoke --retry 3 --connect-timeout 30 -o $exe "https://lol.secure.dyn.riotcdn.net/channels/public/x/installer/current/live.$Region.exe"
 if ($LASTEXITCODE -ne 0) {
     Log "download failed (curl exit $LASTEXITCODE): no network? Run this again later."
     exit 1

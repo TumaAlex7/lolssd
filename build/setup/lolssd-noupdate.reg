@@ -30,9 +30,5 @@ Windows Registry Editor Version 5.00
 [HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\DriverSearching]
 "SearchOrderConfig"=dword:00000000
 
-; ---------------------------------------------------------------- last on purpose
-
-; ACL-protected on a running system: "reg import" stops at the first error, so this key
-; goes last and everything above is already applied. Offline it is written like any other.
-[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\WaaSMedicSvc]
-"Start"=dword:00000004
+; WaaSMedicSvc (turns the services above back on) is ACL-protected: lolssd-specialize.ps1 takes
+; ownership of its key and sets Start=4 itself.

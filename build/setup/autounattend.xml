@@ -1,35 +1,54 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  lolssd answer file template. build/install.sh fills it in for each install and hands it to setup
-  on a second CD: the Windows partition it created (InstallTo), the user from the build options
-  (or none: setup asks), Riot at the first logon or not. Setup itself asks for the language, the
-  edition and the key.
-  - windowsPE: bypass the TPM/Secure Boot/RAM checks in case the VM lacks them;
-  - specialize: apply lolssd.reg (shipped inside the image) before OOBE, so encryption and the
-    rest are off from the very start;
-  - oobeSystem: local administrator "lol", empty password, autologon, no Microsoft account.
-  Everything else runs from SetupComplete.cmd, which Windows starts itself before the first logon;
-  at the first logon lolssd-riot.ps1 preinstalls Riot Client and the game.
+  lolssd answer file template. build/install.sh fills it in for each install and puts it, with
+  our files in lolssd\, on the config disk (a folder QEMU shows as a FAT disk): @WIN@ and @ESP@
+  are partition numbers as setup counts them, blocks between BEGIN/END marks stay or go by the
+  build options. Setup itself asks for the language, the edition and the key.
+  - windowsPE: bypass the TPM/Secure Boot/RAM checks in case the VM lacks them; format the
+    partitions install.sh created (the ESP only when it is new) and install onto the Windows one;
+  - specialize: copy our files from the config disk and run lolssd-specialize.ps1 (registry,
+    removals) before OOBE;
+  - oobeSystem: local administrator, empty password, autologon, no Microsoft account.
+  SetupComplete.cmd (lolssd-setup.ps1) runs before the first logon; at the first logon
+  lolssd-riot.ps1 preinstalls Riot Client and the game.
 -->
 <unattend xmlns="urn:schemas-microsoft-com:unattend" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
   <settings pass="windowsPE">
+<!--TEST-BEGIN-->
+    <component name="Microsoft-Windows-International-Core-WinPE" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+      <SetupUILanguage><UILanguage>en-US</UILanguage></SetupUILanguage>
+      <InputLocale>en-US</InputLocale><SystemLocale>en-US</SystemLocale><UILanguage>en-US</UILanguage><UserLocale>en-US</UserLocale>
+    </component>
+<!--TEST-END-->
     <component name="Microsoft-Windows-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
       <RunSynchronous>
-        <RunSynchronousCommand wcm:action="add">
-          <Order>1</Order>
-          <Path>reg add HKLM\SYSTEM\Setup\LabConfig /v BypassTPMCheck /t REG_DWORD /d 1 /f</Path>
-        </RunSynchronousCommand>
-        <RunSynchronousCommand wcm:action="add">
-          <Order>2</Order>
-          <Path>reg add HKLM\SYSTEM\Setup\LabConfig /v BypassSecureBootCheck /t REG_DWORD /d 1 /f</Path>
-        </RunSynchronousCommand>
-        <RunSynchronousCommand wcm:action="add">
-          <Order>3</Order>
-          <Path>reg add HKLM\SYSTEM\Setup\LabConfig /v BypassRAMCheck /t REG_DWORD /d 1 /f</Path>
-        </RunSynchronousCommand>
+        <RunSynchronousCommand wcm:action="add"><Order>1</Order><Path>reg add HKLM\SYSTEM\Setup\LabConfig /v BypassTPMCheck /t REG_DWORD /d 1 /f</Path></RunSynchronousCommand>
+        <RunSynchronousCommand wcm:action="add"><Order>2</Order><Path>reg add HKLM\SYSTEM\Setup\LabConfig /v BypassSecureBootCheck /t REG_DWORD /d 1 /f</Path></RunSynchronousCommand>
+        <RunSynchronousCommand wcm:action="add"><Order>3</Order><Path>reg add HKLM\SYSTEM\Setup\LabConfig /v BypassRAMCheck /t REG_DWORD /d 1 /f</Path></RunSynchronousCommand>
       </RunSynchronous>
+      <DiskConfiguration>
+        <Disk wcm:action="add">
+          <DiskID>0</DiskID>
+          <WillWipeDisk>false</WillWipeDisk>
+          <ModifyPartitions>
+<!--ESP-BEGIN-->
+            <ModifyPartition wcm:action="add"><Order>1</Order><PartitionID>@ESP@</PartitionID><Format>FAT32</Format><Label>EFI</Label></ModifyPartition>
+<!--ESP-END-->
+            <ModifyPartition wcm:action="add"><Order>2</Order><PartitionID>@WIN@</PartitionID><Format>NTFS</Format><Label>Windows</Label></ModifyPartition>
+          </ModifyPartitions>
+        </Disk>
+      </DiskConfiguration>
+      <ImageInstall>
+        <OSImage>
+          <InstallTo><DiskID>0</DiskID><PartitionID>@WIN@</PartitionID></InstallTo>
+          <WillShowUI>OnError</WillShowUI>
+        </OSImage>
+      </ImageInstall>
       <UserData>
         <AcceptEula>true</AcceptEula>
+<!--TEST-BEGIN-->
+        <ProductKey><Key>VK7JG-NPHTM-C97JM-9MPGT-3V66T</Key></ProductKey>
+<!--TEST-END-->
       </UserData>
     </component>
   </settings>
@@ -38,12 +57,13 @@
       <RunSynchronous>
         <RunSynchronousCommand wcm:action="add">
           <Order>1</Order>
-          <Path>reg add HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE /v BypassNRO /t REG_DWORD /d 1 /f</Path>
+          <Path>powershell.exe -NoProfile -Command "$d=Get-PSDrive -PSProvider FileSystem|?{Test-Path ($_.Root+'lolssd\options.txt')}|select -First 1;$t='C:\Windows\Setup\Scripts\lolssd';md $t -Force;Copy-Item ($d.Root+'lolssd\*') $t -Recurse -Force"</Path>
+          <Description>lolssd: our files from the config disk</Description>
         </RunSynchronousCommand>
         <RunSynchronousCommand wcm:action="add">
           <Order>2</Order>
-          <Path>reg import C:\Windows\Setup\Scripts\lolssd.reg</Path>
-          <Description>lolssd: machine settings (the last key, WaaSMedicSvc, may fail on ACL)</Description>
+          <Path>powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Windows\Setup\Scripts\lolssd\lolssd-specialize.ps1</Path>
+          <Description>lolssd: registry and removals (log: C:\Windows\Setup\Scripts\lolssd-setup.log)</Description>
         </RunSynchronousCommand>
       </RunSynchronous>
     </component>
@@ -55,36 +75,36 @@
     <component name="Microsoft-Windows-International-Core" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
       <InputLocale>en-US;ru-RU</InputLocale>
       <SystemLocale>en-US</SystemLocale>
+      <UILanguage>en-US</UILanguage>
       <UserLocale>ru-RU</UserLocale>
     </component>
     <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
       <OOBE>
         <HideEULAPage>true</HideEULAPage>
+<!--USER-BEGIN-->
         <HideOnlineAccountScreens>true</HideOnlineAccountScreens>
+<!--USER-END-->
         <HideWirelessSetupInOOBE>true</HideWirelessSetupInOOBE>
         <ProtectYourPC>3</ProtectYourPC>
       </OOBE>
+<!--USER-BEGIN-->
       <UserAccounts>
         <LocalAccounts>
           <LocalAccount wcm:action="add">
-            <Name>lol</Name>
+            <Name>@USER@</Name>
             <Group>Administrators</Group>
-            <Password>
-              <Value></Value>
-              <PlainText>true</PlainText>
-            </Password>
+            <Password><Value></Value><PlainText>true</PlainText></Password>
           </LocalAccount>
         </LocalAccounts>
       </UserAccounts>
       <AutoLogon>
         <Enabled>true</Enabled>
-        <Username>lol</Username>
-        <Password>
-          <Value></Value>
-          <PlainText>true</PlainText>
-        </Password>
+        <Username>@USER@</Username>
+        <Password><Value></Value><PlainText>true</PlainText></Password>
         <LogonCount>9999999</LogonCount>
       </AutoLogon>
+<!--USER-END-->
+<!--RIOT-BEGIN-->
       <FirstLogonCommands>
         <SynchronousCommand wcm:action="add">
           <Order>1</Order>
@@ -92,6 +112,16 @@
           <Description>lolssd: preinstall Riot Client and League of Legends</Description>
         </SynchronousCommand>
       </FirstLogonCommands>
+<!--RIOT-END-->
+<!--TEST-BEGIN-->
+      <FirstLogonCommands>
+        <SynchronousCommand wcm:action="add">
+          <Order>1</Order>
+          <CommandLine>shutdown.exe /s /t 60</CommandLine>
+          <Description>lolssd test: power off after the first logon</Description>
+        </SynchronousCommand>
+      </FirstLogonCommands>
+<!--TEST-END-->
     </component>
   </settings>
 </unattend>

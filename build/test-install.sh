@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
 # lolssd: проверка установки целиком, в файл-образ, худший случай — рядом с «Linux» на том же диске:
 # ESP с systemd-boot в \EFI\BOOT\BOOTX64.EFI, раздел ext4 с файлом-меткой и свободное место.
-# install.sh --free в режиме проверки (язык и ключ заданы, без Riot, Windows выключается сама
-# после первого входа), затем проверки: Linux цел, BOOTX64.EFI вернулся, Windows встала на свой
-# раздел, шаги настройки без ошибок, lolssd на LOLSSD. 30–50 минут.
-#   sudo build/test-install.sh dist/iso/lolssd-*.iso
+# install.sh --free со стоковым ISO и набором файлов make payload, в режиме проверки (язык и ключ
+# заданы, без Riot, Windows выключается сама после первого входа), затем проверки: Linux цел,
+# BOOTX64.EFI вернулся, Windows встала на свой раздел, шаги настройки без ошибок, lolssd на
+# LOLSSD. 30–50 минут.
+#   sudo build/test-install.sh Windows.iso
 set -euo pipefail
 
 die() { echo "ошибка: $*" >&2; exit 1; }
 [[ $EUID == 0 && -n ${SUDO_USER:-} ]] || die "запускайте через sudo от своего пользователя"
-[[ $# == 1 ]] || die "использование: sudo $0 dist/iso/lolssd-*.iso"
+[[ $# == 1 ]] || die "использование: sudo $0 Windows.iso"
 iso=$(realpath "$1")
 repo=$(cd "$(dirname "$0")/.." && pwd)
 img=/var/tmp/lolssd-test.img
@@ -37,7 +38,9 @@ umount "$mnt"
 echo "[2/4] install.sh --free (без окна; экран — VNC 127.0.0.1:5909), $(date +%H:%M)…"
 # Ответ «y» на вопрос install.sh — перенаправлением: в конвейере `yes` получил бы SIGPIPE, и
 # pipefail оборвал бы проверку.
-LOLSSD_TEST_KEY=VK7JG-NPHTM-C97JM-9MPGT-3V66T LOLSSD_HEADLESS=1 "$repo/build/install.sh" --free "$dev" "$iso" < <(yes y)
+[[ -f $repo/dist/payload/install.sh ]] || die "нет набора файлов: make payload"
+cp "$repo/dist/payload/options.default" "$repo/dist/payload/options.txt"
+LOLSSD_TEST=1 LOLSSD_HEADLESS=1 bash "$repo/dist/payload/install.sh" --free "$dev" "$iso" "$repo/dist/payload" < <(yes y)
 
 echo "[3/4] проверки…"
 fails=0
@@ -61,7 +64,8 @@ umount "$mnt"
 mount -t ntfs3 -o ro "$win" "$mnt"
 check "Windows на своём разделе" "[[ -f $mnt/Windows/System32/ntoskrnl.exe ]]"
 log=$mnt/Windows/Setup/Scripts/lolssd-setup.log
-check "настройка без ошибок (lolssd-setup.log)" "grep -q 'done, 0 step(s) failed' $log"
+check "specialize без ошибок (lolssd-setup.log)" "grep -aq 'specialize done, 0 step(s) failed' $log"
+check "настройка без ошибок (lolssd-setup.log)" "grep -aq '[0-9] done, 0 step(s) failed' $log"
 grep -a FAIL "$log" 2>/dev/null | sed 's/^/        /' || true
 umount "$mnt"
 
