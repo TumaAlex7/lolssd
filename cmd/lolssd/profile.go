@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/user"
 	"path/filepath"
 	"strconv"
@@ -75,6 +76,7 @@ func runProfile() int {
 	p.Swaps = hostSwaps()
 	p.Keyboard = hostKeyboard()
 	p.AudioPCI = hostAudioPCI()
+	p.Monitors = hostMonitors()
 
 	dir, dirErr := lolssdDir()
 	if dirErr == nil {
@@ -368,4 +370,45 @@ func hostAudioPCI() string {
 		}
 	}
 	return ""
+}
+
+// hostMonitors — раскладка мониторов из Hyprland (hyprctl monitors all) и EDID каждого из
+// /sys/class/drm/card*-<порт>/edid. Без Hyprland — пусто: Windows тогда просто расширяет экраны.
+func hostMonitors() []hostprofile.HostMonitor {
+	out, err := exec.Command("hyprctl", "monitors", "all", "-j").Output()
+	if err != nil {
+		return nil
+	}
+	var hm []struct {
+		Name     string  `json:"name"`
+		X        int     `json:"x"`
+		Y        int     `json:"y"`
+		Width    int     `json:"width"`
+		Height   int     `json:"height"`
+		Scale    float64 `json:"scale"`
+		MirrorOf string  `json:"mirrorOf"`
+		Disabled bool    `json:"disabled"`
+	}
+	if json.Unmarshal(out, &hm) != nil {
+		return nil
+	}
+	var res []hostprofile.HostMonitor
+	for _, m := range hm {
+		edid := []byte(nil)
+		if f, _ := filepath.Glob("/sys/class/drm/card*-" + m.Name + "/edid"); len(f) > 0 {
+			if b, err := os.ReadFile(f[0]); err == nil && len(b) >= 128 {
+				edid = b[:128]
+			}
+		}
+		if edid == nil {
+			continue // без EDID монитор в Windows не узнать
+		}
+		mirror := m.MirrorOf
+		if mirror == "none" {
+			mirror = ""
+		}
+		res = append(res, hostprofile.HostMonitor{Name: m.Name, EDID: edid, X: m.X, Y: m.Y,
+			Width: m.Width, Height: m.Height, Scale: m.Scale, MirrorOf: mirror, Disabled: m.Disabled})
+	}
+	return res
 }

@@ -137,7 +137,7 @@ func vmHost(show bool) int {
 	if !hostShutDown(p, disks) {
 		return 1
 	}
-	if extendDisplays() {
+	if arrangeDisplays(p.Monitors) {
 		time.Sleep(2 * time.Second) // Windows применяет раскладку не сразу
 	}
 	mons, err := activeMonitors()

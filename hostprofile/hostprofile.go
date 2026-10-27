@@ -29,6 +29,23 @@ type Profile struct {
 	// 0000:03:00.6. Звуковая карта ВМ ставится на тот же адрес: имена устройств PipeWire
 	// (alsa_output.pci-0000_03_00.6...) и настройки, завязанные на них, совпадают.
 	AudioPCI string `json:"audio_pci,omitempty"`
+	// Monitors — раскладка мониторов Linux (Hyprland): Windows повторяет её — где зеркало, где
+	// расширение, порядок и стыковка; монитор узнаётся по EDID, а не по порту.
+	Monitors []HostMonitor `json:"monitors,omitempty"`
+}
+
+// HostMonitor — монитор в Linux. X, Y — логические координаты композитора (после масштаба),
+// Width, Height — режим в физических пикселях.
+type HostMonitor struct {
+	Name     string  `json:"name"`
+	EDID     []byte  `json:"edid"` // базовый блок, 128 байт
+	X        int     `json:"x"`
+	Y        int     `json:"y"`
+	Width    int     `json:"width"`
+	Height   int     `json:"height"`
+	Scale    float64 `json:"scale"`
+	MirrorOf string  `json:"mirror_of,omitempty"` // имя монитора, который он повторяет
+	Disabled bool    `json:"disabled,omitempty"`
 }
 
 // VMImage — образ загрузки системы хоста в ВМ (UKI на разделе LOLSSD): её ядро, initramfs и
