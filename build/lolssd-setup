@@ -1,0 +1,7 @@
+#!/bin/sh
+# lolssd: мастер сборки и установки Windows (cmd/lolssd-setup). Запуск из любого места:
+#   build/lolssd-setup
+set -e
+cd "$(dirname "$0")/.."
+command -v go >/dev/null || { echo "нужен Go: sudo pacman -S go" >&2; exit 1; }
+exec go run ./cmd/lolssd-setup
