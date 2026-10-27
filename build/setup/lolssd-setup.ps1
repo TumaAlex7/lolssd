@@ -169,6 +169,10 @@ if (Opt edge) { Step 'remove Edge' {
         if (Test-Path "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe") { throw 'Edge is still installed (uninstall refused)' }
     }
     Remove-Item "$env:PUBLIC\Desktop\Microsoft Edge.lnk" -ErrorAction SilentlyContinue
+    # Edge also ships as Store packages (the browser stub and Game Assist).
+    foreach ($p in Get-AppxProvisionedPackage -Online | Where-Object { $_.DisplayName -in 'Microsoft.MicrosoftEdge.Stable', 'Microsoft.Edge.GameAssist' }) {
+        Remove-AppxProvisionedPackage -Online -PackageName $p.PackageName -AllUsers -ErrorAction SilentlyContinue | Out-Null
+    }
 } }
 
 # The real machine has no NVRAM entry from this install (setup wrote it to the VM's NVRAM);

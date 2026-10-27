@@ -1,0 +1,12 @@
+Windows Registry Editor Version 5.00
+
+; lolssd: Edge removed (build option). Edge Update would install it again, and with Windows Update
+; on, it may come back from there too. WebView2 is not affected: its own app GUID stays allowed.
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\EdgeUpdate]
+"InstallDefault"=dword:00000000
+"Install{56EB18F8-B008-4CBD-B6D2-8C97FE7E9062}"=dword:00000000
+"Update{56EB18F8-B008-4CBD-B6D2-8C97FE7E9062}"=dword:00000000
+"Install{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"=dword:00000001
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\EdgeUpdate]
+"DoNotUpdateToEdgeWithChromium"=dword:00000001

@@ -80,6 +80,7 @@ reg=$work/lolssd.reg
 	cat "$dist/windows/lolssd.reg"
 	[[ $(opt placement) != external ]] || sed 1d "$dist/windows/lolssd-external.reg"
 	[[ $(opt onedrive) != 1 ]] || sed 1d "$dist/windows/lolssd-noonedrive.reg"
+	[[ $(opt edge) != 1 ]] || sed 1d "$dist/windows/lolssd-noedge.reg"
 	[[ $(opt updates) == 1 ]] || sed 1d "$dist/windows/lolssd-noupdate.reg"
 } >"$reg"
 
