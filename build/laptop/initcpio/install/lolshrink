@@ -7,7 +7,6 @@ build() {
     add_binary e2fsck
     add_binary resize2fs
     add_binary sfdisk
-    add_binary blockdev
     add_file "$dir/lolshrink.sh" /usr/local/bin/lolshrink 755
     add_file "$dir/lolshrink.service" /usr/lib/systemd/system/lolshrink.service
     add_symlink /usr/lib/systemd/system/initrd.target.wants/lolshrink.service /usr/lib/systemd/system/lolshrink.service

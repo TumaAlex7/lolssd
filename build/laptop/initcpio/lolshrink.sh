@@ -28,5 +28,8 @@ resize2fs -p "/dev/$part" "$((new / 2))K" || { say "resize2fs failed: partition 
 say "shrinking partition $num on $disk..."
 echo "size=$new" | sfdisk --no-reread --no-tell-kernel -N "$num" "$disk" ||
 	{ say "sfdisk failed: the filesystem is smaller than its partition, harmless"; exit 0; }
-blockdev --rereadpt "$disk" || say "kernel keeps the old table until reboot (harmless)"
+# No re-read of the table here: it drops and re-adds the root's device node while systemd waits
+# on it for /sysroot, the mount fails and the initramfs hangs in emergency mode. This boot
+# keeps the old partition size in memory (the filesystem fits either way), the next one reads
+# the new table.
 say "done: /dev/$part is $((new / 2097152)) GiB, booting on"
