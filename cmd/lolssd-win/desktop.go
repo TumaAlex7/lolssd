@@ -134,6 +134,9 @@ func vmHost(show bool) int {
 	if p.VM == nil {
 		return fail("В профиле нет образа загрузки для ВМ: снимите профиль заново (lolssd profile).")
 	}
+	if !hostShutDown(p, disks) {
+		return 1
+	}
 	if extendDisplays() {
 		time.Sleep(2 * time.Second) // Windows применяет раскладку не сразу
 	}

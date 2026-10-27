@@ -20,8 +20,9 @@ var ESPType = [16]byte{0x28, 0x73, 0x2a, 0xc1, 0x1f, 0xf8, 0xd2, 0x11, 0xba, 0x4
 type Part struct {
 	Num         int
 	Type, GUID  [16]byte
-	First, Last uint64
+	First, Last uint64 // в логических секторах диска
 	Name        string
+	SectorSize  int // 512 или 4096: смещение раздела в байтах — First * SectorSize
 }
 
 // ReadGPT читает таблицу разделов GPT. Пробует логический сектор 512 и 4096 байт.
@@ -55,7 +56,7 @@ func ReadGPT(r io.ReaderAt) ([]Part, error) {
 				continue
 			}
 			copy(p.GUID[:], e[16:32])
-			p.Num, p.First, p.Last = i+1, le.Uint64(e[32:]), le.Uint64(e[40:])
+			p.Num, p.First, p.Last, p.SectorSize = i+1, le.Uint64(e[32:]), le.Uint64(e[40:]), sector
 			p.Name = decodeUCS2(e[56:128])
 			parts = append(parts, p)
 		}

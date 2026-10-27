@@ -161,6 +161,28 @@ Step 'register logon task' {
     Register-ScheduledTask -TaskPath '\lolssd\' -TaskName 'logon' -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null
 }
 
+# For the whole session: a monitor connected after logon is duplicated by Windows; switch to
+# Extend when the set of monitors changes (lolssd-win displays).
+Step 'register display layout task' {
+    $action = New-ScheduledTaskAction -Execute "$prog\lolssd-win.exe" -Argument 'displays'
+    $trigger = New-ScheduledTaskTrigger -AtLogOn
+    $principal = New-ScheduledTaskPrincipal -GroupId 'BUILTIN\Administrators' -RunLevel Highest
+    $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan) -MultipleInstances IgnoreNew -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+    Register-ScheduledTask -TaskPath '\lolssd\' -TaskName 'displays' -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
+}
+
+# Linux inside Windows: when Windows shuts down or restarts, the lolssd-vm service powers the VM
+# off first (ACPI power button over QMP) instead of letting Windows kill QEMU. Windows waits for
+# a service's preshutdown as long as PreshutdownTimeout says.
+if (Opt vm) { Step 'VM shutdown service' {
+    if (-not (Get-Service lolssd-vm -ErrorAction SilentlyContinue)) {
+        New-Service -Name lolssd-vm -DisplayName 'lolssd: shut Linux down with Windows' -StartupType Automatic `
+            -BinaryPathName "`"$prog\lolssd-win.exe`" service" | Out-Null
+    }
+    Set-Reg 'HKLM:\SYSTEM\CurrentControlSet\Services\lolssd-vm' 'PreshutdownTimeout' 120000
+    Start-Service lolssd-vm
+} }
+
 # Drivers from \drivers on the disk's volumes (LOLSSD), at every startup when needed.
 Step 'register driver install task' {
     $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$prog\lolssd-drivers.ps1`""

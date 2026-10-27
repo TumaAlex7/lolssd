@@ -5,8 +5,10 @@ package main
 import (
 	"fmt"
 	"log"
+	"runtime"
 	"sort"
 	"strings"
+	"time"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -155,4 +157,31 @@ func extendDisplays() bool {
 	}
 	log.Println("мониторы: «Дублировать» → «Расширить»")
 	return true
+}
+
+// watchDisplays — задание при входе (lolssd-win displays), живёт весь сеанс: когда меняется набор
+// мониторов (подключили второй уже после входа), Windows снова включает «Дублировать» — тогда
+// раскладка переключается на «Расширить». Только при смене набора: «Дублировать», выбранное потом
+// самим пользователем (Win+P), не перебивается.
+func watchDisplays() int {
+	runtime.LockOSThread()
+	last := ""
+	for {
+		mons, err := activeMonitors()
+		if err == nil {
+			names := make([]string, len(mons))
+			for i, m := range mons {
+				names[i] = m.Name
+			}
+			sort.Strings(names)
+			if key := strings.Join(names, "|"); key != last {
+				if last != "" {
+					log.Printf("мониторы: %s", strings.Join(names, ", "))
+				}
+				extendDisplays()
+				last = key
+			}
+		}
+		time.Sleep(3 * time.Second)
+	}
 }

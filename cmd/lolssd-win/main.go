@@ -36,6 +36,10 @@ func main() {
 		os.Exit(nvramGuard())
 	case "logon":
 		os.Exit(logon())
+	case "service":
+		os.Exit(service())
+	case "displays":
+		os.Exit(watchDisplays())
 	case "desktop":
 		os.Exit(desktop())
 	case "vm":
@@ -52,6 +56,6 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: lolssd-win nvram-guard | logon | shortcuts | desktop | terminal | vm | restart")
+	fmt.Fprintln(os.Stderr, "usage: lolssd-win nvram-guard | logon | displays | service | shortcuts | desktop | terminal | vm | restart")
 	os.Exit(2)
 }
