@@ -19,9 +19,8 @@ dist:
 	# Файлы для Windows — с CRLF: cmd и reg import на LF спотыкаются.
 	for f in SetupComplete.cmd lolssd-setup.ps1; do sed 's/\r*$$/\r/' build/setup/$$f > "$(WIN)/Windows/Setup/Scripts/$$f"; done
 	for f in build/setup/lolssd*.reg; do sed 's/\r*$$/\r/' $$f > dist/windows/$$(basename $$f); done
-	for f in lolssd-drivers.ps1 lolssd-riot.ps1; do sed 's/\r*$$/\r/' build/setup/$$f > "$(WIN)/Program Files/lolssd/$$f"; done
+	for f in lolssd-drivers.ps1 lolssd-gpu.ps1 lolssd-riot.ps1; do sed 's/\r*$$/\r/' build/setup/$$f > "$(WIN)/Program Files/lolssd/$$f"; done
 	cp README.md dist/LOLSSD/README.md
-	cp build/setup/drivers/*.url dist/LOLSSD/drivers/
 
 # QEMU для Windows (ВМ с системой хоста, lolssd-win desktop): dist/qemu, build/qemu.sh.
 qemu:

@@ -69,7 +69,7 @@ func main() {
 		return
 	}
 
-	updates := &tui.Item{Label: "Windows Update", Hint: "с ним приходят и программы производителя (службы ASUS и т. п.); без него драйверы — из папки Drivers"}
+	updates := &tui.Item{Label: "Windows Update", Hint: "с ним приходят и программы производителя (службы ASUS и т. п.); видеодрайвер и без него поставит установщик AMD/NVIDIA/Intel из образа"}
 	vm := &tui.Item{Label: "Linux внутри Windows", Hint: "этот Linux в ВМ, на весь экран", On: true}
 	riot := &tui.Item{Label: "Предустановить League of Legends", Hint: "Riot Client и игра — ещё при установке", On: true}
 	edge := &tui.Item{Label: "Удалить Edge", Hint: "браузер (его или любой другой) ставится из Microsoft Store", On: true}

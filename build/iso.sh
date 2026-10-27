@@ -13,7 +13,8 @@
 #   - наши файлы прямо в образе, установщик ничего не докачивает:
 #       \Windows\Setup\Scripts\   SetupComplete.cmd, lolssd-setup.ps1, lolssd.reg,
 #                                 lolssd-options.txt (файл опций)
-#       \Program Files\lolssd\    lolssd-win.exe, lolssd-drivers.ps1, lolssd-riot.ps1;
+#       \Program Files\lolssd\    lolssd-win.exe, lolssd-drivers.ps1, lolssd-gpu.ps1,
+#                                 lolssd-riot.ps1; gpu\ — установщики AMD, NVIDIA, Intel;
 #                                 с vm=1: vncviewer.exe (TigerVNC), значки ярлыков Linux,
 #                                 qemu\ (make qemu), tap\ (make tap); с sunshine=1: sunshine.msi
 #   - файла ответов в ISO нет: его собирает build/install.sh, он знает раздел для Windows;
@@ -102,6 +103,18 @@ if [[ $(opt sunshine) == 1 && ! -s $sunshine ]]; then
 		"https://github.com/LizardByte/Sunshine/releases/download/$sv/Sunshine-Windows-AMD64-installer.msi" &&
 		mv "$sunshine.part" "$sunshine" || die "Sunshine $sv не скачан"
 fi
+# Установщики драйверов видеокарт (lolssd-gpu.ps1 запускает нужный на машине без драйвера): любые
+# версии — они обновляют себя сами. Прямые ссылки только с версией в адресе, один раз на версию.
+gpu=$dist/cache/gpu
+mkdir -p "$gpu"
+fetch() {
+	[[ -s $gpu/$1 ]] && return
+	curl -fSL --retry 3 -A 'Mozilla/5.0' -e "$3" -o "$gpu/$1.part" "$2" && mv "$gpu/$1.part" "$gpu/$1" ||
+		die "не скачан установщик $1 ($2)"
+}
+fetch amd-software.exe "https://drivers.amd.com/drivers/installer/26.10/whql/amd-software-adrenalin-edition-26.7.1-minimalsetup-260724_web.exe" https://www.amd.com/
+fetch nvidia-app.exe "https://us.download.nvidia.com/nvapp/client/11.0.6.383/NVIDIA_app_v11.0.6.383.exe" https://www.nvidia.com/
+fetch intel-dsa.exe "https://dsadata.intel.com/installer" https://www.intel.com/
 # Обои: картинка по ссылке или файл из WALLPAPER (по умолчанию — сплэш-арт скинов K/DA
 # FIRESTARTER в 4K из релиза assets; в исходниках его нет — это арт Riot), подогнанная под
 # разрешения. Не скачалась или нет ImageMagick — свои обои из build/art.
@@ -134,6 +147,7 @@ cmds=$work/update-commands
 	echo "add '$reg' '/Windows/Setup/Scripts/lolssd.reg'"
 	echo "add '$opts' '/Windows/Setup/Scripts/lolssd-options.txt'"
 	echo "add '$dist/windows/C/Program Files/lolssd' '/Program Files/lolssd'"
+	echo "add '$gpu' '/Program Files/lolssd/gpu'"
 	echo "add '$wall/img0.jpg' '/Windows/Web/Wallpaper/Windows/img0.jpg'"
 	for f in "$wall"/img0_*.jpg; do echo "add '$f' '/Windows/Web/4K/Wallpaper/Windows/$(basename "$f")'"; done
 	echo "add '$wall/img100.jpg' '/Windows/Web/Screen/img100.jpg'"

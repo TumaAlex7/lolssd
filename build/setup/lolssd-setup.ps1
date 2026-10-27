@@ -106,6 +106,17 @@ Step 'register driver install task' {
     Register-ScheduledTask -TaskPath '\lolssd\' -TaskName 'drivers' -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null
 }
 
+# At every logon of an administrator, in the user's session (the installer window must show):
+# the GPU vendor's installer for a card still without its driver (lolssd-gpu.ps1).
+Step 'register GPU installer task' {
+    $ps = "$env:ProgramFiles\lolssd\lolssd-gpu.ps1"
+    if (-not (Test-Path $ps)) { throw "$ps not found" }
+    $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$ps`""
+    $trigger = New-ScheduledTaskTrigger -AtLogOn
+    $principal = New-ScheduledTaskPrincipal -GroupId 'BUILTIN\Administrators' -RunLevel Highest
+    Register-ScheduledTask -TaskPath '\lolssd\' -TaskName 'gpu' -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null
+}
+
 # Shortcuts (lolssd-win shortcuts): "Restart into Windows" in System Tools -- a plain restart
 # boots the host's own system, because nvram-guard keeps Windows out of BootOrder; and, with the
 # vm option, "Linux" (the host's desktop in a VM) and "Linux terminal" in the Start menu root and
