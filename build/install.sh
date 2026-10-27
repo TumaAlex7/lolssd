@@ -117,7 +117,9 @@ win_id=$(sfdisk -d "$dev" | grep '^/dev' | sed -E 's/^[^ ]*[^0-9]([0-9]+) .*/\1/
 
 [[ -z $new_esp ]] || mkfs.fat -F 32 -n EFI "$(part "$esp_num")" >/dev/null
 [[ -z $new_lolssd ]] || mkfs.exfat -q -L LOLSSD "$(part "$lolssd_num")" >/dev/null
-mkfs.ntfs --quick --label Windows "$(part "$win_num")" >/dev/null
+# Начало раздела и геометрия — в загрузочный сектор NTFS: на loop-устройстве mkfs.ntfs их не узнаёт сам.
+mkfs.ntfs --quick --label Windows -p "$(cat "/sys/class/block/$(basename "$(part "$win_num")")/start")" -H 255 -S 63 \
+	"$(part "$win_num")" >/dev/null
 
 say "LOLSSD: утилита для Linux${extra:+ и драйверы}"
 mnt=$(mktemp -d)
@@ -204,7 +206,7 @@ if [[ -n ${LOLSSD_HEADLESS:-} ]] || ! sudo -u "$SUDO_USER" --preserve-env=WAYLAN
 fi
 say "запускаю установку в QEMU ($(date +%H:%M)), обычно 20–40 минут"
 echo "В установщике: язык, «У меня нет ключа продукта», редакция (та, что была на компьютере)."
-echo "Раздел выбран заранее. Дальше всё само: несколько перезагрузок, первый вход$( [[ $(opt riot) != 1 ]] || echo ", установка Riot")."
+echo "Раздел выбран заранее. Дальше всё само: несколько перезагрузок, первый вход$( [[ $(opt riot) != 1 || -n ${LOLSSD_TEST_KEY:-} ]] || echo ", установка Riot")."
 echo "Когда Windows готова, выключите её: Пуск → Завершение работы. Тогда этот скрипт закончит."
 # Диск первым в порядке загрузки, ISO вторым: в ISO нет «Press any key to boot from CD», и с ISO
 # первым каждая перезагрузка начинала бы установку заново. На первом запуске загрузчика Windows

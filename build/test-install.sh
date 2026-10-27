@@ -35,7 +35,9 @@ marker=$(sha256sum <"$mnt/marker")
 umount "$mnt"
 
 echo "[2/4] install.sh --free (без окна; экран — VNC 127.0.0.1:5909), $(date +%H:%M)…"
-yes y | LOLSSD_TEST_KEY=VK7JG-NPHTM-C97JM-9MPGT-3V66T LOLSSD_HEADLESS=1 "$repo/build/install.sh" --free "$dev" "$iso"
+# Ответ «y» на вопрос install.sh — перенаправлением: в конвейере `yes` получил бы SIGPIPE, и
+# pipefail оборвал бы проверку.
+LOLSSD_TEST_KEY=VK7JG-NPHTM-C97JM-9MPGT-3V66T LOLSSD_HEADLESS=1 "$repo/build/install.sh" --free "$dev" "$iso" < <(yes y)
 
 echo "[3/4] проверки…"
 fails=0

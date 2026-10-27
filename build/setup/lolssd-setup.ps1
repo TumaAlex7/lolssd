@@ -138,8 +138,9 @@ if ($removeApps) { Step 'remove provisioned apps' {
 $removePackages = 'Microsoft-Windows-(InternetExplorer-Optional-Package|Kernel-LA57-FoD-Package|LanguageFeatures-(Handwriting|OCR|Speech|TextToSpeech)|MediaPlayer-Package|TabletPCMath-Package|Wallpaper-Content-Extended-FoD-Package|WordPad-FoD-Package|StepsRecorder-Package)'
 if (Opt packages) { Step 'remove Windows packages' {
     $removed = @()
-    # Only base packages (Name~Key~Arch~~Version): language parts (~en-US~) go away with them.
-    foreach ($p in Get-WindowsPackage -Online | Where-Object { $_.PackageName -match $removePackages -and $_.PackageState -eq 'Installed' -and ($_.PackageName -split '~')[3] -eq '' }) {
+    # Only base amd64 packages (Name~Key~amd64~~Version): language parts (~en-US~) and the wow64
+    # halves go away with them.
+    foreach ($p in Get-WindowsPackage -Online | Where-Object { $_.PackageName -match $removePackages -and $_.PackageState -eq 'Installed' -and ($_.PackageName -split '~')[2] -eq 'amd64' -and ($_.PackageName -split '~')[3] -eq '' }) {
         try {
             Remove-WindowsPackage -Online -PackageName $p.PackageName -NoRestart -ErrorAction Stop | Out-Null
             $removed += $p.PackageName
