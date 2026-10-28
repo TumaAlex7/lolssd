@@ -8,11 +8,13 @@
 # Нужно не меньше 120 ГБ: диски «на 128» бывают чуть меньше 128·10⁹ байт. Из пакетов — только
 # QEMU, OVMF, swtpm и util-linux.
 #
-# Разметка (sfdisk): ESP (если на диске его нет), LOLSSD, MSR и раздел Windows. Форматирует их не
-# Linux: ESP и раздел Windows — установщик Windows по файлу ответов, LOLSSD в exFAT — сама Windows
-# в конце установки (lolssd-setup.ps1); утилиту lolssd и драйверы на LOLSSD этот скрипт копирует
-# после установки (exFAT ядро Linux монтирует само). Другие разделы установщик не трогает; язык,
-# редакцию и ключ спрашивает он сам.
+# Разметка: этот скрипт создаёт только раздел LOLSSD (512 МиБ) в начале свободного места (для всего
+# диска — новая GPT с одним LOLSSD), то есть перед будущим C:, чтобы C: мог расти. ESP, MSR и C:
+# создаёт установщик Windows сам, на своём экране выбора раздела: там выбирают «Незанятое место».
+# LOLSSD форматирует в exFAT сама Windows в конце установки (lolssd-setup.ps1); утилиту lolssd и
+# драйверы на него этот скрипт копирует после установки. Язык, редакцию и ключ спрашивает
+# установщик. Только в проверках (LOLSSD_TEST=1) скрипт размечает всё сам (ESP, LOLSSD, MSR,
+# Windows) и выбирает раздел за установщик по файлу ответов.
 #
 # Наши файлы и файл ответов — на «конфигурационном диске»: папке, которую QEMU показывает Windows
 # как флешку FAT (vvfat, до ~500 МБ). Стоковый ISO при загрузке ждёт «Press any key to boot from
@@ -80,7 +82,8 @@ basic=EBD0A0A2-B9E5-4433-87C0-68B6B72699C7 msr=E3C9E316-0B5C-4DB8-817D-F92DF0021
 esp_type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B
 
 # ---------------------------------------------------------------- разметка
-new_esp= new_lolssd=
+test=${LOLSSD_TEST:-}
+new_esp= new_lolssd= win_num=
 if [[ $mode == whole ]]; then
 	[[ -n $image ]] || ! grep -q "^/dev/$name" /proc/mounts || die "разделы $dev смонтированы: весь диск занятого диска не отдать"
 	(( $(size) >= min )) || die "$dev меньше 120 ГБ"
@@ -88,10 +91,18 @@ if [[ $mode == whole ]]; then
 		read -rp "Всё на $dev будет стёрто. Введите $name для подтверждения: " ans
 		[[ $ans == "$name" ]] || die "отменено"
 	fi
-	say "размечаю: ESP, LOLSSD, MSR, Windows — весь остаток"
-	printf 'label: gpt\nsize=512MiB, type=%s, name=EFI\nsize=512MiB, type=%s, name=LOLSSD\nsize=16MiB, type=%s, name=MSR\ntype=%s, name=Windows\n' \
-		"$esp_type" "$basic" "$msr" "$basic" | sfdisk -q --wipe always --wipe-partitions always "$dev"
-	esp_num=1 lolssd_num=2 win_num=4 new_esp=1 new_lolssd=1
+	if [[ -n $test ]]; then
+		say "размечаю (проверка): ESP, LOLSSD, MSR, Windows — весь остаток"
+		printf 'label: gpt\nsize=512MiB, type=%s, name=EFI\nsize=512MiB, type=%s, name=LOLSSD\nsize=16MiB, type=%s, name=MSR\ntype=%s, name=Windows\n' \
+			"$esp_type" "$basic" "$msr" "$basic" | sfdisk -q --wipe always --wipe-partitions always "$dev"
+		esp_num=1 lolssd_num=2 win_num=4
+	else
+		say "размечаю: новая GPT, раздел LOLSSD 512 МиБ в начале; остальное — установщику Windows"
+		printf 'label: gpt\nsize=512MiB, type=%s, name=LOLSSD\n' "$basic" |
+			sfdisk -q --wipe always --wipe-partitions always "$dev"
+		esp_num= lolssd_num=1
+	fi
+	new_esp=1 new_lolssd=1
 else
 	sfdisk -d "$dev" >/dev/null 2>&1 || die "на $dev нет таблицы разделов: для пустого диска — весь диск"
 	[[ $(sfdisk -d "$dev" | sed -n 's/^label: //p') == gpt ]] || die "на $dev разметка не GPT"
@@ -106,34 +117,41 @@ else
 	(( (end - start + 1) * ss >= need + 16 * 1048576 )) ||
 		die "самый большой свободный участок $(( (end - start + 1) * ss / 1000000000 )) ГБ, нужно не меньше 120 ГБ"
 	echo "Свободный участок: $(( (end - start + 1) * ss / 1000000000 )) ГБ (сектора $start–$end)."
-	echo "Будет создано:${new_esp:+ ESP 512 МиБ,}${new_lolssd:+ LOLSSD 512 МиБ,} MSR 16 МиБ, Windows — остаток участка."
+	if [[ -n $test ]]; then
+		echo "Будет создано:${new_esp:+ ESP 512 МиБ,}${new_lolssd:+ LOLSSD 512 МиБ,} MSR 16 МиБ, Windows — остаток участка."
+	else
+		echo "Будет создано:${new_lolssd:+ LOLSSD 512 МиБ в начале участка;} остальное разметит установщик Windows."
+	fi
 	echo "Существующие разделы не меняются."
 	read -rp "Продолжить? [y/N] " ans
 	[[ $ans == [yY] ]] || die "отменено"
 	al=$(( 1048576 / ss ))
 	at=$(( (start + al - 1) / al * al ))
 	table=$(
-		[[ -z $new_esp ]] || { echo "start=$at, size=$(( 512 * al )), type=$esp_type, name=EFI"; at=$(( at + 512 * al )); }
+		[[ -z $test || -z $new_esp ]] || { echo "start=$at, size=$(( 512 * al )), type=$esp_type, name=EFI"; at=$(( at + 512 * al )); }
 		[[ -z $new_lolssd ]] || { echo "start=$at, size=$(( 512 * al )), type=$basic, name=LOLSSD"; at=$(( at + 512 * al )); }
-		echo "start=$at, size=$(( 16 * al )), type=$msr, name=MSR"; at=$(( at + 16 * al ))
-		echo "start=$at, size=$(( (end + 1 - at) / al * al )), type=$basic, name=Windows"
+		[[ -z $test ]] || {
+			echo "start=$at, size=$(( 16 * al )), type=$msr, name=MSR"; at=$(( at + 16 * al ))
+			echo "start=$at, size=$(( (end + 1 - at) / al * al )), type=$basic, name=Windows"
+		}
 	)
-	echo "$table" | sfdisk -q --append --no-reread "$dev"
+	[[ -z $table ]] || echo "$table" | sfdisk -q --append --no-reread "$dev"
 	[[ -n $image ]] || partx -u "$dev" 2>/dev/null || partx -a "$dev" 2>/dev/null || true
 	# Номера новых разделов — по их началу: sfdisk может занять свободную запись в середине таблицы.
 	num_at() { sfdisk -d "$dev" | grep -E "start= *$1," | num || true; }
 	at_of() { echo "$table" | sed -n "s/^start=\([0-9]*\),.*name=$1\$/\1/p"; }
-	win_num=$(num_at "$(at_of Windows)")
-	[[ -n $esp_num ]] || esp_num=$(num_at "$(at_of EFI)")
+	[[ -z $test ]] || win_num=$(num_at "$(at_of Windows)")
+	[[ -n $esp_num || -z $test ]] || esp_num=$(num_at "$(at_of EFI)")
 	[[ -n $lolssd_num ]] || lolssd_num=$(num_at "$(at_of LOLSSD)")
 fi
 [[ -n $image ]] || udevadm settle
 table=$(sfdisk -d "$dev")
-echo "$table" | grep -E "^[^ ]*[^0-9]$win_num : .*name=\"Windows\"" >/dev/null || die "раздел Windows не на месте ($win_num)"
+[[ -z $test ]] || echo "$table" | grep -E "^[^ ]*[^0-9]$win_num : .*name=\"Windows\"" >/dev/null || die "раздел Windows не на месте ($win_num)"
 lolssd_guid=$(echo "$table" | grep -E "^[^ ]*[^0-9]$lolssd_num : " | sed -n 's/.*uuid=\([0-9A-Fa-f-]*\).*/\1/p')
 # Установщик Windows нумерует разделы по порядку занятых записей таблицы, без пропусков.
 id_of() { echo "$table" | grep '^/' | num | awk -v n="$1" '$1 <= n' | wc -l; }
-win_id=$(id_of "$win_num") esp_id=$(id_of "$esp_num")
+win_id= esp_id=
+[[ -z $test ]] || { win_id=$(id_of "$win_num") esp_id=$(id_of "$esp_num"); }
 
 # ---------------------------------------------------------------- ESP хоста
 mnt=$(mktemp -d)
@@ -169,7 +187,6 @@ if [[ -z $image && -z $new_esp ]]; then
 fi
 
 # ---------------------------------------------------------------- конфигурационный диск
-test=${LOLSSD_TEST:-}
 cfg=$work/cfg
 mkdir -p "$cfg/lolssd" "$work/tpm"
 cp -r "$payload/windows/." "$cfg/lolssd/"
@@ -201,7 +218,8 @@ fi
 monitor=$(( 55900 + RANDOM % 1000 ))
 say "запускаю установку в QEMU ($(date +%H:%M)), обычно 20–40 минут"
 [[ -n $test ]] || echo "В установщике: язык, «У меня нет ключа продукта», редакция (та, что была на компьютере)."
-echo "Раздел выбран заранее. Дальше всё само: несколько перезагрузок, скачивание компонентов, первый вход$( [[ $(opt riot) != 1 || -n $test ]] || echo ", установка Riot")."
+[[ -n $test ]] || echo "Где установить Windows: выберите «Незанятое место» (Unallocated space) — НЕ раздел LOLSSD — и «Далее»."
+echo "Дальше всё само: несколько перезагрузок, скачивание компонентов, первый вход$( [[ $(opt riot) != 1 || -n $test ]] || echo ", установка Riot")."
 [[ -n $test ]] || echo "Когда Windows готова, выключите её: Пуск → Завершение работы. Тогда этот скрипт закончит."
 # Стоковый ISO ждёт клавишу («Press any key to boot from CD»): Enter через монитор QEMU, первые
 # 25 секунд. Потом загрузка идёт с диска: диск первым в порядке загрузки, а на первом запуске

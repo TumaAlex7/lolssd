@@ -4,8 +4,10 @@
   our files in lolssd\, on the config disk (a folder QEMU shows as a FAT disk): @WIN@ and @ESP@
   are partition numbers as setup counts them, blocks between BEGIN/END marks stay or go by the
   build options. Setup itself asks for the language, the edition and the key.
-  - windowsPE: bypass the TPM/Secure Boot/RAM checks in case the VM lacks them; format the
-    partitions install.sh created (the ESP only when it is new) and install onto the Windows one;
+  - windowsPE: bypass the TPM/Secure Boot/RAM checks in case the VM lacks them. The user picks
+    the place on setup's own disk screen (unallocated space; setup makes the ESP, MSR and C:).
+    Only in tests (TEST blocks) install.sh partitions everything and this file picks the
+    partition: it formats the ones install.sh created (the ESP only when new) and installs there;
   - specialize: copy our files from the config disk and run lolssd-specialize.ps1 (registry,
     removals) before OOBE;
   - oobeSystem: local administrator, empty password, autologon, no Microsoft account.
@@ -26,6 +28,7 @@
         <RunSynchronousCommand wcm:action="add"><Order>2</Order><Path>reg add HKLM\SYSTEM\Setup\LabConfig /v BypassSecureBootCheck /t REG_DWORD /d 1 /f</Path></RunSynchronousCommand>
         <RunSynchronousCommand wcm:action="add"><Order>3</Order><Path>reg add HKLM\SYSTEM\Setup\LabConfig /v BypassRAMCheck /t REG_DWORD /d 1 /f</Path></RunSynchronousCommand>
       </RunSynchronous>
+<!--TEST-BEGIN-->
       <DiskConfiguration>
         <Disk wcm:action="add">
           <DiskID>0</DiskID>
@@ -44,6 +47,7 @@
           <WillShowUI>OnError</WillShowUI>
         </OSImage>
       </ImageInstall>
+<!--TEST-END-->
       <UserData>
         <AcceptEula>true</AcceptEula>
 <!--TEST-BEGIN-->

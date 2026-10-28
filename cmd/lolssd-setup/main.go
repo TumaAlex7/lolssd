@@ -158,7 +158,7 @@ func main() {
 	if drivers != "" {
 		summary = append(summary, "Драйверы: "+drivers)
 	}
-	warn := tui.Amber + "Будет создано место под Windows в свободном участке; существующие разделы не меняются." + "\x1b[0m"
+	warn := tui.Amber + "В начале свободного участка будет создан раздел LOLSSD; существующие разделы не меняются." + "\x1b[0m"
 	if t.whole {
 		warn = tui.Red + "ВСЁ на " + t.dev + " будет стёрто." + "\x1b[0m"
 	}
@@ -431,7 +431,7 @@ func pickTarget() *target {
 		}
 		free := largestFree(d.Name)
 		switch {
-		case d.PTType == "gpt" && len(d.Children) > 0 && free >= minBytes:
+		case d.PTType == "gpt" && len(d.Children) > 0 && free >= minBytes+512<<20: // + LOLSSD
 			targets = append(targets, target{"/dev/" + d.Name, false, usb, desc + " — в свободные " + gb(free)})
 		case d.Size < minBytes:
 			unfit = append(unfit, "  "+desc+": меньше 120 ГБ")
@@ -454,7 +454,8 @@ func pickTarget() *target {
 		labels[i] = t.label
 	}
 	header := []string{"Есть свободное место от 120 ГБ — Windows встанет туда, остальное не тронется;",
-		"нет — диск будет стёрт целиком. Разделы не ужимаются."}
+		"нет — диск будет стёрт целиком. Разделы не ужимаются. Сам мастер создаёт только раздел",
+		"LOLSSD (512 МБ); остальное размечает установщик Windows: выберите там «Незанятое место»."}
 	if len(unfit) > 0 {
 		header = append(header, "", "Не подходят:")
 		header = append(header, unfit...)
