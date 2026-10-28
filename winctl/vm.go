@@ -47,7 +47,10 @@ func QEMUArgs(v VM) []string {
 		accel += ",kernel-irqchip=off"
 	}
 	a := []string{
-		"-name", "lolssd", "-nodefaults", "-machine", "q35,vmport=off", "-accel", accel,
+		// Клавиатура — virtio, а не PS/2: эмуляция PS/2 в QEMU не отдаёт гостю F13–F24 (клавиша
+		// Copilot — Win+Shift+F23), virtio передаёт коды Linux как есть (проверено: KEY_F23).
+		"-name", "lolssd", "-nodefaults", "-machine", "q35,vmport=off,i8042=off", "-accel", accel,
+		"-device", "virtio-keyboard-pci",
 		"-cpu", "max,vmx=off,svm=off", "-smp", strconv.Itoa(v.CPUs), "-m", strconv.Itoa(v.MemMiB),
 		"-kernel", v.Kernel, "-initrd", v.Initrd,
 		// Вход в консоли (ярлык «Linux terminal»): getty на втором COM-порту.
@@ -95,17 +98,11 @@ func QEMUArgs(v VM) []string {
 // VMUdevRules — правила udev, которые ВМ передаёт системе при загрузке (учётные данные systemd
 // udev.rules.*, через SMBIOS; на диск хоста ничего не пишется).
 //
-// Клавиатура: PS/2-клавиатура QEMU не умеет F16–F23, поэтому Windows шлёт F23 как F24
-// (Scancode Map в lolssd-win), а здесь скан-коду 0x76 возвращается F23. Встроенная команда
-// keyboard — отдельным правилом: IMPORT выполняется до присваиваний своего правила.
-//
 // Мышь: у планшета каждого выхода — калибровочная матрица libinput. Hyprland растягивает абсолютные координаты устройства на всю раскладку мониторов,
 // а планшет QEMU отдаёт их внутри своего выхода; матрица переводит одно в другое. Раскладка —
 // как её ставит Hyprland без правил для выходов: в ряд слева направо, по верхнему краю, масштаб 1.
 func VMUdevRules(mons []hostprofile.WinMonitor) string {
 	var b strings.Builder
-	b.WriteString(`ACTION!="remove", SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="AT Translated Set 2 keyboard", ENV{KEYBOARD_KEY_76}="f23"` + "\n")
-	b.WriteString(`ACTION!="remove", SUBSYSTEM=="input", KERNEL=="event*", ENV{KEYBOARD_KEY_76}=="f23", IMPORT{builtin}="keyboard"` + "\n")
 	total, height := 0, 0
 	for _, m := range mons {
 		total += m.Width

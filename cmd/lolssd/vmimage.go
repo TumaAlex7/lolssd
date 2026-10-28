@@ -10,8 +10,9 @@ import (
 	"lolssd/hostprofile"
 )
 
-// Диски ВМ — NVMe (QEMU): драйвер в initramfs нужен, даже если autodetect на этом железе его не взял.
-var vmModules = []string{"nvme"}
+// Диски ВМ — NVMe, клавиатура — virtio (QEMU): драйверы в initramfs нужны, даже если autodetect на
+// этом железе их не взял; без virtio_input не ввести пароль LUKS при загрузке.
+var vmModules = []string{"nvme", "virtio_pci", "virtio_input"}
 
 // buildVMImage собирает образ загрузки системы хоста в ВМ (QEMU в Windows) — UKI на разделе
 // LOLSSD, — её же mkinitcpio и ядром. В системе ничего не меняется: свой конфиг mkinitcpio

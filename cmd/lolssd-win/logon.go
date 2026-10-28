@@ -39,11 +39,11 @@ func logon() int {
 		return 0
 	}
 	log.Printf("профиль %s (%s, %s)", p.MachineID, p.Distro.ID, p.User.Name)
-	if applyScancodeMap() {
+	if removeOldScancodeMap() {
 		const mbOK, mbIconInfo, mbSetForeground = 0x0, 0x40, 0x10000
 		procMessageBox.Call(0, uintptr(unsafe.Pointer(windows.StringToUTF16Ptr(
-			"Клавиша Copilot переназначена для Linux (F23 → F24).\n"+
-				"Они начнут действовать после перезагрузки Windows."))),
+			"Убрано старое переназначение клавиши Copilot (F23 → F24): теперь она доходит до Linux сама.\n"+
+				"Изменение подействует после перезагрузки Windows."))),
 			uintptr(unsafe.Pointer(windows.StringToUTF16Ptr("lolssd"))), mbOK|mbIconInfo|mbSetForeground)
 	}
 	return 0
@@ -139,34 +139,27 @@ func findProfile(vol string) (hostprofile.Profile, []hostDisk, error) {
 
 var procMessageBox = user32.NewProc("MessageBoxW")
 
-// vmScancodes — Scancode Map Windows для ВМ. Клавиши переназначает keyd самой системы в ВМ, и
-// переносить его правила в Windows нельзя: keyd выдаёт нажатую правую Win как левую (модификаторы
-// у него всегда левые, правая получается только из правила «= rightmeta»), поэтому Menu → RWin в
-// Windows давала в ВМ левую Super. Остаётся только перевозка F23 (0x6E): PS/2-клавиатура QEMU не
-// умеет F16–F23, и клавиша Copilot (Win+Shift+F23) доходила бы без F23. Windows шлёт её как F24
-// (0x76), а в ВМ правило udev (winctl.VMUdevRules) возвращает этому скан-коду F23 — keyd получает
-// тот же аккорд, что на железе.
-var vmScancodes = map[uint16]uint16{0x006e: 0x0076}
+// oldScancodeMap — Scancode Map прежних версий: F23 → F24 для клавиши Copilot в ВМ (эмуляция PS/2
+// в QEMU не отдавала F23). Клавиатура ВМ теперь virtio и передаёт F23 сама.
+var oldScancodeMap = keymap.ScancodeMap(map[uint16]uint16{0x006e: 0x0076})
 
-// applyScancodeMap приводит Scancode Map к vmScancodes. Драйвер клавиатуры читает его при
-// загрузке, поэтому при изменении нужна перезагрузка — тогда возвращает true.
-func applyScancodeMap() bool {
-	k, _, err := registry.CreateKey(registry.LOCAL_MACHINE, `SYSTEM\CurrentControlSet\Control\Keyboard Layout`, registry.QUERY_VALUE|registry.SET_VALUE)
+// removeOldScancodeMap убирает эту запись, если её поставила прежняя версия (чужую не трогает).
+// Драйвер клавиатуры читает Scancode Map при загрузке: true — нужна перезагрузка.
+func removeOldScancodeMap() bool {
+	k, err := registry.OpenKey(registry.LOCAL_MACHINE, `SYSTEM\CurrentControlSet\Control\Keyboard Layout`, registry.QUERY_VALUE|registry.SET_VALUE)
 	if err != nil {
-		log.Println("Scancode Map:", err)
 		return false
 	}
 	defer k.Close()
 	cur, _, _ := k.GetBinaryValue("Scancode Map")
-	want := keymap.ScancodeMap(vmScancodes)
-	if bytes.Equal(cur, want) {
+	if !bytes.Equal(cur, oldScancodeMap) {
 		return false
 	}
-	if err := k.SetBinaryValue("Scancode Map", want); err != nil {
+	if err := k.DeleteValue("Scancode Map"); err != nil {
 		log.Println("Scancode Map:", err)
 		return false
 	}
-	log.Println("Scancode Map: F23 → F24 для ВМ, нужна перезагрузка")
+	log.Println("Scancode Map прежней версии убран, нужна перезагрузка")
 	return true
 }
 

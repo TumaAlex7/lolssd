@@ -15,13 +15,14 @@ func TestVMUdevRules(t *testing.T) {
 	for _, want := range []string{
 		`ATTRS{serial}=="lolssd-head0", ENV{LIBINPUT_CALIBRATION_MATRIX}="0.428571 0 0.000000 0 1.000000 0"`,
 		`ATTRS{serial}=="lolssd-head1", ENV{LIBINPUT_CALIBRATION_MATRIX}="0.571429 0 0.428571 0 1.000000 0"`,
-		// Проверено на стенде: Win+Shift+F24 от VNC → keyd laptop.conf → RIGHTMETA.
-		`ATTRS{name}=="AT Translated Set 2 keyboard", ENV{KEYBOARD_KEY_76}="f23"` + "\n",
-		`ENV{KEYBOARD_KEY_76}=="f23", IMPORT{builtin}="keyboard"`,
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("нет %q в\n%s", want, got)
 		}
+	}
+	// Переправки F23 через F24 больше нет: клавиатура ВМ — virtio, F23 доходит сама.
+	if strings.Contains(got, "KEYBOARD_KEY") {
+		t.Errorf("осталось правило клавиатуры:\n%s", got)
 	}
 }
 
@@ -62,7 +63,7 @@ func TestQEMUArgs(t *testing.T) {
 		"if=none,id=disk0,format=raw,file=\\\\.\\PhysicalDrive1",
 		"nvme,drive=disk0,serial=S0LSSD0TEST0001,model=NVMe Test Disk",
 		"virtio-gpu-pci,id=video0,max_outputs=2,xres=2560,yres=1600",
-		"q35,vmport=off",
+		"q35,vmport=off,i8042=off",
 		"127.0.0.1:1,id=vnc0,display=video0,head=0",
 		"127.0.0.1:2,id=vnc1,display=video0,head=1",
 		"usb-tablet,bus=xhci.0,serial=lolssd-head1,display=video0,head=1",
