@@ -63,16 +63,12 @@ func findProfile(vol string) (hostprofile.Profile, []hostDisk, error) {
 	if len(files) == 0 {
 		return hostprofile.Profile{}, nil, fmt.Errorf("профилей нет (lolssd profile на хосте)")
 	}
-	// PARTUUID → номер диска для всех дисков, кроме системного (этого SSD).
-	sys, err := systemDisk()
-	if err != nil {
-		return hostprofile.Profile{}, nil, err
-	}
+	// PARTUUID → номер диска для всех дисков, включая системный: Windows может стоять рядом с
+	// Linux на одном диске. ВМ тогда получает и системный диск, но записать в разделы, которые
+	// Windows держит смонтированными (C: и т. п.), ей не даст сама Windows: запись через
+	// \\.\PhysicalDriveN в сектора смонтированного тома запрещена.
 	where := map[string]int{}
 	for n := 0; n < 64; n++ {
-		if n == sys {
-			continue
-		}
 		parts, err := diskGPT(n)
 		if err != nil {
 			continue // диска с таким номером нет или на нём не GPT

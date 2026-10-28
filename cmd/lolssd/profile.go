@@ -117,7 +117,11 @@ func lolssdDir() (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// Имя раздела GPT (так размечает install.sh) или метка ФС (раздел, созданный в Windows).
 	label, err := filepath.EvalSymlinks("/dev/disk/by-partlabel/" + partLabel)
+	if err != nil || filepath.Base(label) != filepath.Base(dev) {
+		label, err = filepath.EvalSymlinks("/dev/disk/by-label/" + partLabel)
+	}
 	if err != nil || filepath.Base(label) != filepath.Base(dev) {
 		return "", fmt.Errorf("раздел %s не найден или это не он", partLabel)
 	}
@@ -196,7 +200,9 @@ func hostMounts(ssdDisk string) ([]mount, error) {
 		if err != nil {
 			return nil, fmt.Errorf("не удалось разобрать устройство %s (%s): %w", mi.target, mi.source, err)
 		}
-		if onDisk(dev, ssdDisk) || onUSB(dev) {
+		// Разделы на диске с LOLSSD тоже берём: Windows может стоять рядом с Linux на одном диске,
+		// а сама Windows (NTFS) и LOLSSD (exFAT) в hostFS и так не входят.
+		if onUSB(dev) {
 			continue
 		}
 		res = append(res, mount{Target: mi.target, FSType: mi.fstype, Subvol: subvol, Options: mi.options, Device: dev})
