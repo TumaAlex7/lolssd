@@ -397,8 +397,9 @@ type blockdev struct {
 	Children    []blockdev `json:"children"`
 }
 
-// pickTarget: весь диск (если он не занят смонтированными разделами) или его самый большой
-// свободный участок; только варианты от 120 ГБ.
+// pickTarget: пользователь выбирает диск, способ решает мастер. Есть свободный участок от 120 ГБ —
+// Windows встаёт туда, остальное на диске не трогается; нет — диск стирается целиком, если он не
+// занят смонтированными разделами. Диски, куда не встать никак, — в шапке с причиной.
 func pickTarget() *target {
 	out, err := exec.Command("lsblk", "--json", "--bytes", "-o", "NAME,SIZE,TYPE,TRAN,MODEL,PTTYPE,MOUNTPOINTS").Output()
 	if err != nil {
@@ -411,6 +412,7 @@ func pickTarget() *target {
 		fail(err)
 	}
 	var targets []target
+	var unfit []string
 	for _, d := range l.Blockdevices {
 		if d.Type != "disk" || strings.HasPrefix(d.Name, "zram") || strings.HasPrefix(d.Name, "loop") {
 			continue
@@ -427,16 +429,23 @@ func pickTarget() *target {
 				busy = busy || m != ""
 			}
 		}
-		if free := largestFree(d.Name); d.PTType == "gpt" && len(d.Children) > 0 && free >= minBytes {
-			targets = append(targets, target{"/dev/" + d.Name, false, usb, "свободное место " + gb(free) + " на " + desc})
-		}
-		if !busy && d.Size >= minBytes {
-			targets = append(targets, target{"/dev/" + d.Name, true, usb, "весь диск " + desc + " — стереть"})
+		free := largestFree(d.Name)
+		switch {
+		case d.PTType == "gpt" && len(d.Children) > 0 && free >= minBytes:
+			targets = append(targets, target{"/dev/" + d.Name, false, usb, desc + " — в свободные " + gb(free)})
+		case d.Size < minBytes:
+			unfit = append(unfit, "  "+desc+": меньше 120 ГБ")
+		case !busy:
+			targets = append(targets, target{"/dev/" + d.Name, true, usb, desc + " — стереть весь диск"})
+		default:
+			unfit = append(unfit, "  "+desc+": на нём работает система, а свободного места меньше 120 ГБ")
 		}
 	}
 	if len(targets) == 0 {
-		fmt.Println("Нет подходящего места: нужен диск от 120 ГБ целиком (без смонтированных разделов)")
-		fmt.Println("или свободный участок от 120 ГБ на диске с разметкой GPT.")
+		fmt.Println("Нет подходящего диска: нужен свободный участок от 120 ГБ или незанятый диск от 120 ГБ.")
+		for _, u := range unfit {
+			fmt.Println(u)
+		}
 		return nil
 	}
 	sort.SliceStable(targets, func(i, j int) bool { return targets[i].usb && !targets[j].usb })
@@ -444,9 +453,13 @@ func pickTarget() *target {
 	for i, t := range targets {
 		labels[i] = t.label
 	}
-	i := tui.Menu("Куда ставить Windows", []string{
-		"Нужно не меньше 120 ГБ. Разделы не ужимаются: только уже свободное место или весь диск.",
-	}, labels)
+	header := []string{"Есть свободное место от 120 ГБ — Windows встанет туда, остальное не тронется;",
+		"нет — диск будет стёрт целиком. Разделы не ужимаются."}
+	if len(unfit) > 0 {
+		header = append(header, "", "Не подходят:")
+		header = append(header, unfit...)
+	}
+	i := tui.Menu("На какой диск ставить Windows", header, labels)
 	if i < 0 {
 		return nil
 	}
