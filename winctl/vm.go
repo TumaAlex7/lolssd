@@ -25,6 +25,9 @@ type VM struct {
 	SerialLog               string
 	QMPPort                 int
 	IrqchipOff              bool // запасной режим WHPX: прерывания в QEMU, а не в гипервизоре
+	// Windows — экраны в окнах самого QEMU (SDL, по окну на выход, на весь экран; их ставит на
+	// мониторы lolssd-win) вместо VNC и TigerVNC: без лишних копий кадра и таймера VNC.
+	Windows bool
 }
 
 // VMDisk — диск хоста целиком (\\.\PhysicalDriveN), который Windows держит отключённым.
@@ -71,9 +74,10 @@ func QEMUArgs(v VM) []string {
 	}
 	a = append(a, "-device", "qemu-xhci,id=xhci")
 	for i := range v.Monitors {
-		a = append(a,
-			"-vnc", fmt.Sprintf("127.0.0.1:%d,id=vnc%d,display=video0,head=%d", VNCPort(i)-5900, i, i),
-			"-device", fmt.Sprintf("usb-tablet,bus=xhci.0,serial=lolssd-head%d,display=video0,head=%d", i, i))
+		if !v.Windows {
+			a = append(a, "-vnc", fmt.Sprintf("127.0.0.1:%d,id=vnc%d,display=video0,head=%d", VNCPort(i)-5900, i, i))
+		}
+		a = append(a, "-device", fmt.Sprintf("usb-tablet,bus=xhci.0,serial=lolssd-head%d,display=video0,head=%d", i, i))
 	}
 	a = append(a, "-smbios", "type=11,value=io.systemd.credential.binary:udev.rules.70-lolssd-vm="+
 		base64.StdEncoding.EncodeToString([]byte(VMUdevRules(v.Monitors))))
@@ -88,8 +92,14 @@ func QEMUArgs(v VM) []string {
 	} else {
 		a = append(a, "-nic", "user,model=virtio-net-pci")
 	}
+	// Окна QEMU: SDL открывает по окну на выход; на весь экран — и тогда QEMU захватывает
+	// клавиатуру, Win уходит в Linux; закрытие окна ВМ не выключает (выключают изнутри).
+	display := "none"
+	if v.Windows {
+		display = "sdl,full-screen=on,window-close=off"
+	}
 	a = append(a,
-		"-display", "none", "-serial", "file:"+v.SerialLog,
+		"-display", display, "-serial", "file:"+v.SerialLog,
 		"-serial", fmt.Sprintf("tcp:127.0.0.1:%d,server=on,wait=off,nodelay=on", ConsolePort),
 		"-qmp", fmt.Sprintf("tcp:127.0.0.1:%d,server=on,wait=off", v.QMPPort))
 	return a

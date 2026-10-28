@@ -61,7 +61,7 @@ var dataDir = filepath.Join(os.Getenv("ProgramData"), "lolssd")
 const showEvent = `Local\lolssd-vm-show`
 
 // desktop — ярлык «Linux»: система хоста в ВМ и её рабочий стол на всех мониторах.
-func desktop() int { return vmHost(true) }
+func desktop() int { return vmHost(true, false) }
 
 // vmHost (docs/ARCHITECTURE.md §6): система хоста в ВМ QEMU с WHPX, своим ядром со своих дисков;
 // с show — на каждый монитор Windows полноэкранный TigerVNC на выход virtio-gpu этой ВМ, без
@@ -72,7 +72,10 @@ func desktop() int { return vmHost(true) }
 // запросом UAC. Монитор отдают Windows, закрыв его просмотрщик (Ctrl+Alt+M → Exit viewer), и
 // возвращают Linux сочетанием Ctrl+Alt+F12 на нём. Всё заканчивается, когда система в ВМ
 // выключается: тогда закрываются и просмотрщики.
-func vmHost(show bool) int {
+//
+// qemuWindows — экраны в окнах самого QEMU вместо VNC (ярлык «Linux (окна QEMU)», для сравнения
+// плавности): окна сворачивают и разворачивают, как любые; Ctrl+Alt+G — отпустить клавиатуру.
+func vmHost(show, qemuWindows bool) int {
 	if h, err := windows.OpenEvent(windows.EVENT_MODIFY_STATE, false, windows.StringToUTF16Ptr(showEvent)); err == nil {
 		if show {
 			windows.SetEvent(h)
@@ -82,7 +85,10 @@ func vmHost(show bool) int {
 	}
 	if !windows.GetCurrentProcessToken().IsElevated() {
 		cmd := "vm"
-		if show {
+		switch {
+		case qemuWindows:
+			cmd = "desktop-qemu"
+		case show:
 			cmd = "desktop"
 		}
 		exe, _ := os.Executable()
@@ -158,6 +164,7 @@ func vmHost(show bool) int {
 		Keyd:      keymap.VMConfig(p.Keyboard.Keyd),
 		SerialLog: filepath.Join(dataDir, "serial.log"),
 		QMPPort:   qmpPort,
+		Windows:   qemuWindows,
 	}
 	vm.Kernel, vm.Initrd, vm.Cmdline, err = unpackUKI(filepath.Join(vol, p.VM.Path), filepath.Join(dataDir, "vm"))
 	if err != nil {
@@ -192,6 +199,9 @@ func vmHost(show bool) int {
 	}
 	vmDone := make(chan struct{})
 	go func() { proc.Wait(); close(vmDone) }()
+	if qemuWindows {
+		return qemuWindowsLoop(proc, vmDone, mons, ev)
+	}
 
 	if r, _, err := procRegisterHotKey.Call(0, hotkeyToggle, modControl|modAlt|modNoRepeat, vkF12); r == 0 {
 		log.Println("RegisterHotKey Ctrl+Alt+F12:", err) // не мешает: остаётся Ctrl+Alt+M в TigerVNC

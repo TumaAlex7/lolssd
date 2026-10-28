@@ -200,6 +200,7 @@ if ($vm) {
   foreach ($d in $menu, "$env:PUBLIC\Desktop") {
     Link "$d\Linux.lnk" 'desktop' "The host's Linux in a VM, full screen on every monitor" "$prog\linux.ico,0"
     Link "$d\Linux terminal.lnk" 'terminal' "The host's Linux in a VM, console only" "$prog\terminal.ico,0"
+    Link "$d\Linux (QEMU windows).lnk" 'desktop-qemu' "The host's Linux in a VM, in QEMU's own windows instead of VNC" "$prog\linux.ico,0"
   }
 }`
 	out, err := hidden(time.Minute, "powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script).CombinedOutput()
