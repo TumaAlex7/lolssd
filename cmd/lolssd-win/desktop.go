@@ -318,7 +318,9 @@ func startQEMU(exe string, vm winctl.VM) (*os.Process, error) {
 	c := exec.Command(exe, args...)
 	c.Stdout, c.Stderr = f, f
 	const createNoWindow = 0x08000000
-	c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: createNoWindow}
+	// Скрытый запуск (SW_HIDE в STARTUPINFO) Windows применяет и к первому окну процесса: окна
+	// SDL в режиме окон QEMU так и остались бы невидимыми.
+	c.SysProcAttr = &syscall.SysProcAttr{HideWindow: !vm.Windows, CreationFlags: createNoWindow}
 	if err := c.Start(); err != nil {
 		return nil, err
 	}
