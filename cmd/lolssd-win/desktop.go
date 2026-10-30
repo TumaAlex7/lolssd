@@ -29,7 +29,32 @@ var (
 	procSetTimer        = user32.NewProc("SetTimer")
 	procGetMessage      = user32.NewProc("GetMessageW")
 	procGetCursorPos    = user32.NewProc("GetCursorPos")
+	procGetForeground   = user32.NewProc("GetForegroundWindow")
+	procGetWindowText   = user32.NewProc("GetWindowTextW")
 )
+
+// foreground — активное окно (у него клавиатура, если её не перехватил TigerVNC): процесс и
+// заголовок. Для журнала: TigerVNC пишет нажатия, но не фокус и не захват клавиатуры.
+func foreground() string {
+	h, _, _ := procGetForeground.Call()
+	if h == 0 {
+		return "нет"
+	}
+	var pid uint32
+	windows.GetWindowThreadProcessId(windows.HWND(h), &pid)
+	name := fmt.Sprint(pid)
+	if p, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, pid); err == nil {
+		buf := make([]uint16, windows.MAX_PATH)
+		n := uint32(len(buf))
+		if windows.QueryFullProcessImageName(p, 0, &buf[0], &n) == nil {
+			name = filepath.Base(windows.UTF16ToString(buf[:n]))
+		}
+		windows.CloseHandle(p)
+	}
+	t := make([]uint16, 256)
+	n, _, _ := procGetWindowText.Call(h, uintptr(unsafe.Pointer(&t[0])), uintptr(len(t)))
+	return fmt.Sprintf("%s %q", name, windows.UTF16ToString(t[:n]))
+}
 
 const (
 	hotkeyToggle = 1
@@ -228,6 +253,7 @@ func vmHost(show bool) int {
 	}
 
 	var m msg
+	lastFg := ""
 	for {
 		r, _, _ := procGetMessage.Call(uintptr(unsafe.Pointer(&m)), 0, 0, 0)
 		if int32(r) <= 0 {
@@ -236,6 +262,10 @@ func vmHost(show bool) int {
 		}
 		switch m.Message {
 		case wmTimer:
+			if fg := foreground(); fg != lastFg {
+				log.Printf("активное окно: %s", fg)
+				lastFg = fg
+			}
 			select {
 			case <-vmDone:
 				closeAll()
