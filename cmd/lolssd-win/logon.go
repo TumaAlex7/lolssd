@@ -39,10 +39,10 @@ func logon() int {
 		return 0
 	}
 	log.Printf("профиль %s (%s, %s)", p.MachineID, p.Distro.ID, p.User.Name)
-	if removeOldScancodeMap() {
+	if setCopilotScancodeMap() {
 		const mbOK, mbIconInfo, mbSetForeground = 0x0, 0x40, 0x10000
 		procMessageBox.Call(0, uintptr(unsafe.Pointer(windows.StringToUTF16Ptr(
-			"Убрано старое переназначение клавиши Copilot (F23 → F24): теперь она доходит до Linux сама.\n"+
+			"Клавиша Copilot переназначена, чтобы через VNC доходить до Linux.\n"+
 				"Изменение подействует после перезагрузки Windows."))),
 			uintptr(unsafe.Pointer(windows.StringToUTF16Ptr("lolssd"))), mbOK|mbIconInfo|mbSetForeground)
 	}
@@ -139,27 +139,38 @@ func findProfile(vol string) (hostprofile.Profile, []hostDisk, error) {
 
 var procMessageBox = user32.NewProc("MessageBoxW")
 
-// oldScancodeMap — Scancode Map прежних версий: F23 → F24 для клавиши Copilot в ВМ (эмуляция PS/2
-// в QEMU не отдавала F23). Клавиатура ВМ теперь virtio и передаёт F23 сама.
-var oldScancodeMap = keymap.ScancodeMap(map[uint16]uint16{0x006e: 0x0076})
+// Клавиша Copilot — Win+Shift+F23, F23 у Windows — скан-код 0x6E. Через VNC его теряет QEMU:
+// в его таблице скан-кодов F23 — 0x6D (у Windows это F22), а 0x6E ни с чем не связан
+// (проверено трассировкой vnc_key_event_ext в QEMU 11.1). Поэтому Windows отдаёт Copilot как
+// 0x6D, и в ВМ приходит F23. copilotScancodeMap — эта запись; oldScancodeMap — запись прежних
+// версий (F23 → F24 для эмуляции PS/2; с virtio-клавиатурой QEMU теряет и F24).
+var (
+	copilotScancodeMap = keymap.ScancodeMap(map[uint16]uint16{0x006e: 0x006d})
+	oldScancodeMap     = keymap.ScancodeMap(map[uint16]uint16{0x006e: 0x0076})
+)
 
-// removeOldScancodeMap убирает эту запись, если её поставила прежняя версия (чужую не трогает).
-// Драйвер клавиатуры читает Scancode Map при загрузке: true — нужна перезагрузка.
-func removeOldScancodeMap() bool {
+// setCopilotScancodeMap ставит copilotScancodeMap, если Scancode Map нет или в ней запись
+// прежней версии (чужую не трогает). Драйвер клавиатуры читает Scancode Map при загрузке:
+// true — нужна перезагрузка.
+func setCopilotScancodeMap() bool {
 	k, err := registry.OpenKey(registry.LOCAL_MACHINE, `SYSTEM\CurrentControlSet\Control\Keyboard Layout`, registry.QUERY_VALUE|registry.SET_VALUE)
 	if err != nil {
 		return false
 	}
 	defer k.Close()
 	cur, _, _ := k.GetBinaryValue("Scancode Map")
-	if !bytes.Equal(cur, oldScancodeMap) {
+	switch {
+	case bytes.Equal(cur, copilotScancodeMap):
+		return false
+	case cur != nil && !bytes.Equal(cur, oldScancodeMap):
+		log.Println("Scancode Map уже задан не нами, Copilot не переназначен")
 		return false
 	}
-	if err := k.DeleteValue("Scancode Map"); err != nil {
+	if err := k.SetBinaryValue("Scancode Map", copilotScancodeMap); err != nil {
 		log.Println("Scancode Map:", err)
 		return false
 	}
-	log.Println("Scancode Map прежней версии убран, нужна перезагрузка")
+	log.Println("Scancode Map: Copilot (0x6E) → 0x6D, нужна перезагрузка")
 	return true
 }
 

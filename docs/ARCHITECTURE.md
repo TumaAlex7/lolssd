@@ -238,7 +238,7 @@ systemd через SMBIOS** — на диск хоста ничего не пи�
 
 | Учётные данные | Что делают |
 |---|---|
-| `udev.rules.70-lolssd-vm` | матрица `LIBINPUT_CALIBRATION_MATRIX` для планшета каждого выхода (раскладка «в ряд, масштаб 1»); скан-коду 0x76 PS/2-клавиатуры — `KEY_F23` (§7) |
+| `udev.rules.70-lolssd-vm` | матрица `LIBINPUT_CALIBRATION_MATRIX` для планшета каждого выхода (раскладка «в ряд, масштаб 1») |
 | `tmpfiles.extra` | сведённый конфиг keyd в `/run/lolssd-vm/keyd/vm.conf` (§7) |
 | `systemd.unit-dropin.keyd.service` | `BindReadOnlyPaths=/run/lolssd-vm/keyd:/etc/keyd` — keyd в ВМ читает его |
 
@@ -277,9 +277,11 @@ systemd через SMBIOS** — на диск хоста ничего не пи�
   Например, у автора Menu → правая Super из `default.conf` и аккорд Copilot из `laptop.conf`.
   Отдельная правая Win не помогла бы: keyd выдаёт нажатые модификаторы левыми, правая Super
   получается только из правила `= rightmeta`.
-- **F23.** PS/2-клавиатура QEMU не умеет F16–F23, а клавиша Copilot шлёт Win+Shift+F23. Windows
-  переназначает F23 в F24 (`Scancode Map`, единственная запись, её пишет `lolssd-win logon` и
-  просит перезагрузку), а правило udev в ВМ возвращает этому скан-коду F23.
+- **F23.** Клавиша Copilot шлёт Win+Shift+F23, у Windows F23 — скан-код 0x6E. Клавиатура ВМ —
+  virtio, она F23 передаёт, но VNC-сервер QEMU берёт скан-коды по своей таблице, где F23 — 0x6D
+  (у Windows это F22), а 0x6E ни с чем не связан и теряется. Поэтому Windows переназначает
+  0x6E в 0x6D (`Scancode Map`, единственная запись; её пишет `lolssd-win logon` и просит
+  перезагрузку), и в ВМ приходит F23.
 
 Не переносится: настройки тачпада и мыши Linux, жесты (их назначают в настройках Windows),
 пресеты input-remapper (переназначения кнопок мыши лучше записать в её память). Программы-
