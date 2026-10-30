@@ -3,9 +3,13 @@
 package main
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -167,9 +171,10 @@ func extendDisplays() bool {
 func watchDisplays() int {
 	runtime.LockOSThread()
 	var host []hostprofile.HostMonitor
+	profile := ""
 	if vol, err := lolssdVolume(); err == nil {
 		if p, _, err := findProfile(vol); err == nil {
-			host = p.Monitors
+			host, profile = p.Monitors, profileTag(p)
 		}
 	}
 	log.Printf("мониторов в профиле Linux: %d", len(host))
@@ -186,7 +191,7 @@ func watchDisplays() int {
 				if last != "" {
 					log.Printf("мониторы: %s", strings.Join(names, ", "))
 				}
-				arrangeDisplays(host)
+				arrangeDisplays(host, profile)
 				last = key
 			}
 		}
@@ -237,7 +242,17 @@ func targetEDID(k targetKey) []byte {
 
 // arrangeDisplays — раскладка мониторов: как в Linux (профиль с мониторами), иначе просто
 // «Расширить» вместо «Дублировать». Возвращает true, если раскладка менялась.
-func arrangeDisplays(host []hostprofile.HostMonitor) bool {
+//
+// Один раз на пару «профиль + подключённые мониторы» (profile — его метка, файл layout.txt):
+// раскладку, которую пользователь потом поменял сам, запуск ВМ при тех же мониторах не
+// перебивает; новый профиль или другой набор мониторов — ставит снова.
+func arrangeDisplays(host []hostprofile.HostMonitor, profile string) bool {
+	state := filepath.Join(dataDir, "layout.txt")
+	key := profile + " " + connectedTargets()
+	if b, _ := os.ReadFile(state); strings.TrimSpace(string(b)) == key {
+		return false
+	}
+	defer os.WriteFile(state, []byte(key+"\n"), 0o644)
 	if len(host) > 0 {
 		changed, err := applyHostLayout(host)
 		if err == nil {
@@ -246,6 +261,32 @@ func arrangeDisplays(host []hostprofile.HostMonitor) bool {
 		log.Println("мониторы как в Linux:", err)
 	}
 	return extendDisplays()
+}
+
+// connectedTargets — подключённые мониторы (включённые или нет) по EDID и номеру выхода, по
+// порядку. LUID видеокарты для этого не годится: Windows меняет его при каждой загрузке.
+func connectedTargets() string {
+	all, _, err := queryConfig(qdcAllPaths)
+	if err != nil {
+		return ""
+	}
+	var ids []string
+	for _, p := range all {
+		if p.Available == 0 {
+			continue
+		}
+		sum := sha256.Sum256(targetEDID(targetKey{p.TgtAdapter, p.TgtID}))
+		if id := fmt.Sprintf("%d:%x", p.TgtID, sum[:6]); !slices.Contains(ids, id) {
+			ids = append(ids, id)
+		}
+	}
+	sort.Strings(ids)
+	return strings.Join(ids, ",")
+}
+
+// profileTag — метка профиля для layout.txt: новый снимок профиля — новая метка.
+func profileTag(p hostprofile.Profile) string {
+	return p.MachineID + "@" + p.Created.UTC().Format(time.RFC3339)
 }
 
 // applyHostLayout ставит мониторы как в Linux (winctl.PlanDisplays, PlaceDisplays) через CCD API в

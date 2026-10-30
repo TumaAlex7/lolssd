@@ -143,7 +143,7 @@ func vmHost(show, qemuWindows bool) int {
 	if !hostShutDown(p, disks) {
 		return 1
 	}
-	if arrangeDisplays(p.Monitors) {
+	if arrangeDisplays(p.Monitors, profileTag(p)) {
 		time.Sleep(2 * time.Second) // Windows применяет раскладку не сразу
 	}
 	mons, err := activeMonitors()
