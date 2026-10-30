@@ -23,14 +23,15 @@ var (
 	procSetForeground = user32.NewProc("SetForegroundWindow")
 )
 
-// qemuWindow — окно QEMU (SDL) и номер выхода, который оно показывает.
+// qemuWindow — окно QEMU и номер выхода, который оно показывает.
 type qemuWindow struct {
 	hwnd  windows.HWND
 	head  int
 	title string
 }
 
-// SDL в QEMU подписывает окна выходов «QEMU (имя-N)», где N — номер консоли (выхода).
+// Окна выходов QEMU подписаны «QEMU (имя-N)», где N — номер консоли (выхода); у окна GTK
+// номера нет — это выход 0.
 var headTitle = regexp.MustCompile(`-(\d+)\)`)
 
 // processWindows — видимые окна верхнего уровня процесса pid, в порядке создания.
@@ -62,7 +63,7 @@ func processWindows(pid int) []qemuWindow {
 }
 
 // placeWindows ставит окно каждого выхода на весь его монитор Windows (выходы — слева направо,
-// как мониторы). Окна SDL на весь экран, поэтому это просто их прямоугольник: QEMU сообщает
+// как мониторы). Окна QEMU на весь экран, поэтому это просто их прямоугольник: QEMU сообщает
 // гостю новый размер выхода сам.
 func placeWindows(ws []qemuWindow, mons []hostprofile.WinMonitor) {
 	const swpNoZOrder, swpShowWindow, swpFrameChanged = 0x4, 0x40, 0x20

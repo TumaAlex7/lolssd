@@ -25,8 +25,8 @@ type VM struct {
 	SerialLog               string
 	QMPPort                 int
 	IrqchipOff              bool // запасной режим WHPX: прерывания в QEMU, а не в гипервизоре
-	// Windows — экраны в окнах самого QEMU (SDL, по окну на выход, на весь экран; их ставит на
-	// мониторы lolssd-win) вместо VNC и TigerVNC: без лишних копий кадра и таймера VNC.
+	// Windows — экран в окне самого QEMU (GTK, на весь экран; его ставит на монитор lolssd-win)
+	// вместо VNC и TigerVNC: без лишних копий кадра и таймера VNC.
 	Windows bool
 }
 
@@ -92,11 +92,13 @@ func QEMUArgs(v VM) []string {
 	} else {
 		a = append(a, "-nic", "user,model=virtio-net-pci")
 	}
-	// Окна QEMU: SDL открывает по окну на выход; на весь экран — и тогда QEMU захватывает
-	// клавиатуру, Win уходит в Linux; закрытие окна ВМ не выключает (выключают изнутри).
+	// Окно QEMU — GTK: видимое окно SDL на Windows вешает QEMU вместе с гостем (проверено у
+	// автора: ядро встаёт на первых секундах, окно не отвечает; GTK в том же запуске работает).
+	// У GTK одно окно на все выходы (остальные — вкладки), так что в этом режиме Linux виден на
+	// одном мониторе. На весь экран; закрытие окна ВМ не выключает (выключают изнутри).
 	display := "none"
 	if v.Windows {
-		display = "sdl,full-screen=on,window-close=off"
+		display = "gtk,full-screen=on,window-close=off"
 	}
 	a = append(a,
 		"-display", display, "-serial", "file:"+v.SerialLog,
