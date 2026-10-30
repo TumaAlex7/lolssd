@@ -1,0 +1,40 @@
+--- a/ui/sdl2.c
++++ b/ui/sdl2.c
+@@ -33,6 +33,7 @@
+ #include "system/runstate-action.h"
+ #include "system/system.h"
+ #include "qemu/log.h"
++#include "qemu/main-loop.h"
+ #include "qemu-main.h"
+ 
+ #ifdef CONFIG_X11
+@@ -296,7 +297,7 @@
+     }
+ }
+ 
+-static void sdl_mouse_mode_change(Notifier *notify, void *data)
++static void sdl_mouse_mode_change_bh(void *opaque)
+ {
+     if (qemu_input_is_absolute(sdl2_console[0].dcl.con)) {
+         if (!absolute_enabled) {
+@@ -312,6 +313,20 @@
+     }
+ }
+ 
++/*
++ * Mouse mode notifiers run in whichever thread changed the input handlers,
++ * often a vCPU thread with the BQL held (the guest enabling its tablet).
++ * On Windows, SDL window calls from a thread other than the one that created
++ * the window (the grab and the title update here) become a synchronous
++ * SendMessage to that thread, the main loop, which may be waiting for the
++ * BQL: a deadlock that stops the guest. Do the work in the main loop.
++ */
++static void sdl_mouse_mode_change(Notifier *notify, void *data)
++{
++    aio_bh_schedule_oneshot(qemu_get_aio_context(), sdl_mouse_mode_change_bh,
++                            NULL);
++}
++
+ static void sdl_send_mouse_event(struct sdl2_console *scon, int dx, int dy,
+                                  int x, int y, int state)
+ {
