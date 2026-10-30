@@ -62,8 +62,21 @@ foreach ($c in $m.EnumEveryConnection) {
   elseif ($cfg.SharingEnabled) { $cfg.DisableSharing(); "unshared $($p.Name)" }
 }
 if (-not $pub -or -not $priv) { throw "ICS: не найдены подключения $($up.InterfaceAlias) / $name" }
-if (-not ($pub.SharingEnabled -and $pub.SharingConnectionType -eq 0)) { $pub.DisableSharing(); $pub.EnableSharing(0); "public $($up.InterfaceAlias)" }
-if (-not ($priv.SharingEnabled -and $priv.SharingConnectionType -eq 1)) { $priv.DisableSharing(); $priv.EnableSharing(1); "private $name" }
+
+# После перезагрузки Windows общий доступ числится включённым, но не работает: служба ICS
+# (SharedAccess) его не поднимает, DHCP на TAP молчит (у автора: адрес ВМ получала только в
+# запуск, который включал общий доступ). Поэтому: служба — автоматически и запущена, общий доступ
+# переживает перезагрузку (EnableRebootPersistConnection), и пара включается заново при каждом
+# запуске ВМ.
+$svc = Get-Service SharedAccess
+$ip = (Get-NetIPAddress -InterfaceAlias $name -AddressFamily IPv4 -ErrorAction SilentlyContinue).IPAddress
+"before: SharedAccess $($svc.Status)/$($svc.StartType), $($up.InterfaceAlias) shared $($pub.SharingEnabled), $name shared $($priv.SharingEnabled) ip $ip"
+New-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\SharedAccess' -Name EnableRebootPersistConnection -Value 1 -PropertyType DWord -Force | Out-Null
+if ($svc.StartType -ne 'Automatic') { Set-Service SharedAccess -StartupType Automatic }
+if ($svc.Status -ne 'Running') { Start-Service SharedAccess }
+$pub.DisableSharing(); $priv.DisableSharing()
+$pub.EnableSharing(0); $priv.EnableSharing(1)
+"shared $($up.InterfaceAlias) -> $name"
 `
 	out, err := hidden(3*time.Minute, "powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
 		"-Command", script).CombinedOutput()
