@@ -143,9 +143,8 @@ func vmHost(show, qemuWindows bool) int {
 	if !hostShutDown(p, disks) {
 		return 1
 	}
-	if arrangeDisplays(p.Monitors, profileTag(p)) {
-		time.Sleep(2 * time.Second) // Windows применяет раскладку не сразу
-	}
+	// Раскладку мониторов ставит не запуск ВМ, а задание displays (watchDisplays) — при входе и
+	// при подключении мониторов, до того как пользователь начнёт её править.
 	mons, err := activeMonitors()
 	if err != nil || len(mons) == 0 {
 		return fail("Мониторы Windows: %v", err)
