@@ -43,9 +43,7 @@ func main() {
 	case "desktop":
 		os.Exit(desktop())
 	case "vm":
-		os.Exit(vmHost(false, false))
-	case "desktop-qemu":
-		os.Exit(vmHost(true, true))
+		os.Exit(vmHost(false))
 	case "terminal":
 		os.Exit(terminal())
 	case "shortcuts":
@@ -58,6 +56,6 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: lolssd-win nvram-guard | logon | displays | service | shortcuts | desktop | desktop-qemu | terminal | vm | restart")
+	fmt.Fprintln(os.Stderr, "usage: lolssd-win nvram-guard | logon | displays | service | shortcuts | desktop | terminal | vm | restart")
 	os.Exit(2)
 }

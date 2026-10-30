@@ -25,9 +25,6 @@ type VM struct {
 	SerialLog               string
 	QMPPort                 int
 	IrqchipOff              bool // запасной режим WHPX: прерывания в QEMU, а не в гипервизоре
-	// Windows — экран в окне самого QEMU (GTK, на весь экран; его ставит на монитор lolssd-win)
-	// вместо VNC и TigerVNC: без лишних копий кадра и таймера VNC.
-	Windows bool
 }
 
 // VMDisk — диск хоста целиком (\\.\PhysicalDriveN), который Windows держит отключённым.
@@ -74,10 +71,9 @@ func QEMUArgs(v VM) []string {
 	}
 	a = append(a, "-device", "qemu-xhci,id=xhci")
 	for i := range v.Monitors {
-		if !v.Windows {
-			a = append(a, "-vnc", fmt.Sprintf("127.0.0.1:%d,id=vnc%d,display=video0,head=%d", VNCPort(i)-5900, i, i))
-		}
-		a = append(a, "-device", fmt.Sprintf("usb-tablet,bus=xhci.0,serial=lolssd-head%d,display=video0,head=%d", i, i))
+		a = append(a,
+			"-vnc", fmt.Sprintf("127.0.0.1:%d,id=vnc%d,display=video0,head=%d", VNCPort(i)-5900, i, i),
+			"-device", fmt.Sprintf("usb-tablet,bus=xhci.0,serial=lolssd-head%d,display=video0,head=%d", i, i))
 	}
 	a = append(a, "-smbios", "type=11,value=io.systemd.credential.binary:udev.rules.70-lolssd-vm="+
 		base64.StdEncoding.EncodeToString([]byte(VMUdevRules(v.Monitors))))
@@ -92,16 +88,8 @@ func QEMUArgs(v VM) []string {
 	} else {
 		a = append(a, "-nic", "user,model=virtio-net-pci")
 	}
-	// Окно QEMU — GTK: видимое окно SDL на Windows вешает QEMU вместе с гостем (проверено у
-	// автора: ядро встаёт на первых секундах, окно не отвечает; GTK в том же запуске работает).
-	// У GTK одно окно на все выходы (остальные — вкладки), так что в этом режиме Linux виден на
-	// одном мониторе. На весь экран; закрытие окна ВМ не выключает (выключают изнутри).
-	display := "none"
-	if v.Windows {
-		display = "gtk,full-screen=on,window-close=off"
-	}
 	a = append(a,
-		"-display", display, "-serial", "file:"+v.SerialLog,
+		"-display", "none", "-serial", "file:"+v.SerialLog,
 		"-serial", fmt.Sprintf("tcp:127.0.0.1:%d,server=on,wait=off,nodelay=on", ConsolePort),
 		"-qmp", fmt.Sprintf("tcp:127.0.0.1:%d,server=on,wait=off", v.QMPPort))
 	return a

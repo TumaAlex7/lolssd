@@ -118,13 +118,3 @@ func TestKeydArgs(t *testing.T) {
 		t.Errorf("drop-in: %q", d)
 	}
 }
-
-func TestQEMUArgsWindows(t *testing.T) {
-	v := VM{Kernel: "k", Initrd: "i", Monitors: []hostprofile.WinMonitor{{Width: 1920, Height: 1080}, {X: 1920, Width: 2560, Height: 1080}},
-		SerialLog: "s", QMPPort: 4444, Windows: true}
-	s := strings.Join(QEMUArgs(v), "\x00")
-	if strings.Contains(s, "-vnc") || !strings.Contains(s, "-display\x00gtk,full-screen=on,window-close=off\x00") ||
-		!strings.Contains(s, "usb-tablet,bus=xhci.0,serial=lolssd-head1,display=video0,head=1") {
-		t.Fatal(strings.ReplaceAll(s, "\x00", " "))
-	}
-}
