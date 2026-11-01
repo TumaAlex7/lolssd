@@ -178,7 +178,16 @@ func main() {
 	if t.whole {
 		mode = "--whole"
 	}
-	args := []string{"bash", filepath.Join(dir, "install.sh"), mode, t.dev, iso, dir}
+	// sudo очищает окружение, оставляя DISPLAY: без WAYLAND_DISPLAY и XDG_RUNTIME_DIR окно QEMU
+	// открылось бы через XWayland (мыльное при дробном масштабе, другой класс окна). Передаём их
+	// в самой команде: env после sudo работает при любом env_reset.
+	args := []string{"env"}
+	for _, v := range []string{"WAYLAND_DISPLAY", "DISPLAY", "XDG_RUNTIME_DIR"} {
+		if s := os.Getenv(v); s != "" {
+			args = append(args, v+"="+s)
+		}
+	}
+	args = append(args, "bash", filepath.Join(dir, "install.sh"), mode, t.dev, iso, dir)
 	if drivers != "" {
 		args = append(args, drivers)
 	}
