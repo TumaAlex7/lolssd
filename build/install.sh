@@ -146,6 +146,15 @@ else
 fi
 [[ -n $image ]] || udevadm settle
 table=$(sfdisk -d "$dev")
+# Новый LOLSSD может лечь на чужую ФС: при «весь диск» он начинается там же, где у прежней Windows
+# был ESP. sfdisk --wipe-partitions стирает только метку ФС (строку «FAT32» для blkid), а прошивка
+# ВМ подключает FAT и без неё — и грузит старый загрузчик вместо ISO (у автора: Windows Boot
+# Manager, 0xc0000225, нет BCD). Обнуляем первый МиБ раздела: загрузочный сектор и его копию.
+if [[ -n $new_lolssd ]]; then
+	ss=$(echo "$table" | sed -n 's/^sector-size: //p')
+	at=$(echo "$table" | grep -E "^[^ ]*[^0-9]$lolssd_num : " | sed -n 's/.*start= *\([0-9]*\),.*/\1/p')
+	dd if=/dev/zero of="$dev" bs="$ss" seek="$at" count=$(( 1048576 / ss )) conv=notrunc,fsync status=none
+fi
 [[ -z $test ]] || echo "$table" | grep -E "^[^ ]*[^0-9]$win_num : .*name=\"Windows\"" >/dev/null || die "раздел Windows не на месте ($win_num)"
 lolssd_guid=$(echo "$table" | grep -E "^[^ ]*[^0-9]$lolssd_num : " | sed -n 's/.*uuid=\([0-9A-Fa-f-]*\).*/\1/p')
 # Установщик Windows нумерует разделы по порядку занятых записей таблицы, без пропусков.
